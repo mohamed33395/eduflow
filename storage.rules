@@ -1,0 +1,38 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUser() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && getUser().role == 'super_admin';
+    }
+
+    match /videos/{allPaths=**} {
+      allow read, write: if isSuperAdmin() || isAuthenticated() &&
+        (getUser().role in ['course_owner', 'teacher', 'student']);
+    }
+
+    match /pdfs/{allPaths=**} {
+      allow read, write: if isSuperAdmin() || isAuthenticated() &&
+        (getUser().role in ['course_owner', 'teacher', 'student']);
+    }
+
+    match /images/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /submissions/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /avatars/{allPaths=**} {
+      allow read, write: if isAuthenticated() && request.auth.uid == request.path[1];
+    }
+  }
+}

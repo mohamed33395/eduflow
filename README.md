@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EduFlow — Educational Management Platform
+
+A scalable SaaS educational management platform built with **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS 4**, and **Firebase** (Auth, Firestore, Storage).
+
+## Features
+
+- **Role-based access control** for:
+  - Super Admin
+  - Center Owner
+  - Course Owner
+  - Teacher
+  - Student
+- Multiple dashboards per role
+- Center & course management with unique URLs
+- Students, teachers, lessons, assignments, attendance, payments
+- Video / PDF / image uploads via Firebase Storage
+- Firestore Security Rules for data protection
+- Route protection via Next.js 16 `proxy.ts`
+
+## Tech Stack
+
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Firebase Client SDK v12
+- Firebase Admin SDK v14
+- Lucide React icons
+
+## Project Structure
+
+```
+app/
+├── admin/              # Super Admin dashboard
+├── center/             # Center Owner dashboard
+├── course/             # Course Owner dashboard
+├── teacher/            # Teacher dashboard
+├── student/            # Student dashboard
+├── login/              # Login page
+├── components/         # Reusable UI & layout components
+├── lib/                # Firebase client, admin, auth helpers
+├── hooks/              # Custom React hooks
+├── services/           # Firestore service layer
+├── types/              # TypeScript types
+proxy.ts                # Next.js 16 route protection
+firestore.rules         # Firestore Security Rules
+storage.rules           # Firebase Storage Rules
+firestore.indexes.json  # Firestore composite indexes
+```
 
 ## Getting Started
 
-First, run the development server:
+1. Create a Firebase project and enable:
+   - Authentication (Email/Password)
+   - Cloud Firestore
+   - Firebase Storage
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+2. Create a `.env.local` file in the project root:
+
+```
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+
+FIREBASE_ADMIN_PROJECT_ID=...
+FIREBASE_ADMIN_CLIENT_EMAIL=...
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Install dependencies and run the dev server:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) and sign in.
 
-## Learn More
+## Security Rules
 
-To learn more about Next.js, take a look at the following resources:
+Deploy Firestore and Storage rules from the project root:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+firebase deploy --only firestore:rules
+firebase deploy --only storage:rules
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Build
 
-## Deploy on Vercel
+```bash
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Important Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- This project uses **Next.js 16** where `middleware.ts` is deprecated in favor of `proxy.ts`.
+- Server Components fetch data with `getSessionUser()` from the secure HTTP-only session cookie.
+- Client Components use Firebase Auth directly for interactive features.

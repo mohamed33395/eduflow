@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    function isSuperAdmin() { return isRole('super_admin'); }
+    function isCenterOwner() { return isRole('center_owner'); }
+    function isCourseOwner() { return isRole('course_owner'); }
+    function isTeacher() { return isRole('teacher'); }
+    function isStudent() { return isRole('student'); }
+
+    function userCenterId() { return isAuthenticated() ? getUserData().centerId : null; }
+    function userCourseId() { return isAuthenticated() ? getUserData().courseId : null; }
+
+    function toList(value) {
+      return value is list ? value : [];
+    }
+
+    function getTeacherCourses() {
+      return isAuthenticated() ? toList(get(/databases/$(database)/documents/teachers/$(request.auth.uid)).data.assignedCourses) : [];
+    }
+
+    function getStudentCourses() {
+      return isAuthenticated() ? toList(get(/databases/$(database)/documents/students/$(request.auth.uid)).data.courses) : [];
+    }
+
+    function getCourseCenterId(courseId) {
+      return get(/databases/$(database)/documents/courses/$(courseId)).data.centerId;
+    }
+
+    function getAssignmentTeacherId(assignmentId) {
+      return get(/databases/$(database)/documents/assignments/$(assignmentId)).data.teacherId;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isSuperAdmin();
+      allow read, update: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /centers/{centerId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if (isCenterOwner() || isTeacher() || isStudent()) && userCenterId() == centerId;
+      allow read: if resource.data.status == 'active';
+    }
+
+    match /courses/{courseId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isCourseOwner() && resource.data.ownerId == request.auth.uid;
+      allow read: if userCourseId() == courseId;
+      allow read: if isTeacher() && getTeacherCourses().hasAny([courseId]);
+      allow read: if isStudent() && getStudentCourses().hasAny([courseId]);
+      allow read: if isCenterOwner() && resource.data.centerId == userCenterId();
+      allow read: if resource.data.status == 'active';
+    }
+
+    match /teachers/{teacherId} {
+      allow read, write: if isSuperAdmin();
+      allow read, update: if isAuthenticated() && request.auth.uid == teacherId;
+      allow read: if isCenterOwner() && resource.data.centerId == userCenterId();
+      allow read: if isCourseOwner() && toList(resource.data.assignedCourses).hasAny([userCourseId()]);
+    }
+
+    match /students/{studentId} {
+      allow read, write: if isSuperAdmin();
+      allow read, update: if isAuthenticated() && request.auth.uid == studentId;
+      allow read: if isCenterOwner() && resource.data.centerId == userCenterId();
+      allow read: if isTeacher() && getTeacherCourses().hasAny(toList(resource.data.courses));
+      allow read: if isCourseOwner() && userCourseId() in toList(resource.data.courses);
+    }
+
+    match /lessons/{lessonId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isCourseOwner() && resource.data.courseId == userCourseId();
+      allow read: if isCenterOwner() && getCourseCenterId(resource.data.courseId) == userCenterId();
+      allow read: if isTeacher() && getTeacherCourses().hasAny([resource.data.courseId]);
+      allow read: if isStudent() && getStudentCourses().hasAny([resource.data.courseId]);
+      allow create: if isSuperAdmin() || (isCourseOwner() && request.resource.data.courseId == userCourseId());
+      allow update, delete: if isSuperAdmin() || (isCourseOwner() && resource.data.courseId == userCourseId());
+    }
+
+    match /assignments/{assignmentId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isCourseOwner() && resource.data.courseId == userCourseId();
+      allow read: if isCenterOwner() && getCourseCenterId(resource.data.courseId) == userCenterId();
+      allow read: if isTeacher() && getTeacherCourses().hasAny([resource.data.courseId]);
+      allow read: if isStudent() && getStudentCourses().hasAny([resource.data.courseId]);
+      allow create: if isSuperAdmin() || (isCourseOwner() && request.resource.data.courseId == userCourseId());
+      allow update, delete: if isSuperAdmin() || (isCourseOwner() && resource.data.courseId == userCourseId());
+    }
+
+    match /submissions/{submissionId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.studentId;
+      allow read: if isTeacher() && request.auth.uid == getAssignmentTeacherId(resource.data.assignmentId);
+      allow create: if isStudent() && request.auth.uid == request.resource.data.studentId;
+      allow update: if isTeacher() && request.auth.uid == getAssignmentTeacherId(resource.data.assignmentId);
+    }
+
+    match /attendance/{recordId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create, update: if isCenterOwner();
+      allow create, update: if isTeacher() && resource.data.courseId != null && getTeacherCourses().hasAny([resource.data.courseId]);
+    }
+
+    match /payments/{paymentId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.studentId;
+      allow read: if isCenterOwner();
+      allow create, update: if isCenterOwner();
+    }
+
+    match /classes/{classId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isCenterOwner() && resource.data.centerId == userCenterId();
+      allow read: if isTeacher() && resource.data.teacherIds.hasAny([request.auth.uid]);
+      allow create, update: if isSuperAdmin() || isCenterOwner();
+    }
+
+    match /subjects/{subjectId} {
+      allow read, write: if isSuperAdmin();
+      allow read: if isCenterOwner() && resource.data.centerId == userCenterId();
+      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow read: if isStudent() && getStudentCourses().hasAny([subjectId]);
+      allow create, update: if isSuperAdmin() || isCenterOwner();
+    }
+  }
+}

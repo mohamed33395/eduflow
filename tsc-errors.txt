@@ -1,0 +1,237 @@
+﻿app/components/Analytics.tsx(1,38): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/Analytics.tsx(2,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/Analytics.tsx(3,145): error TS2307: Cannot find module 'recharts' or its corresponding type declarations.
+app/components/Analytics.tsx(5,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/Analytics.tsx(6,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/Analytics.tsx(49,33): error TS18046: 'data' is of type 'unknown'.
+app/components/Analytics.tsx(49,54): error TS18046: 'data' is of type 'unknown'.
+app/components/Analytics.tsx(50,12): error TS18046: 'data' is of type 'unknown'.
+app/components/Analytics.tsx(67,16): error TS18046: 'data' is of type 'unknown'.
+app/components/Analytics.tsx(68,35): error TS18046: 'data' is of type 'unknown'.
+app/components/Analytics.tsx(68,56): error TS18046: 'data' is of type 'unknown'.
+app/components/Analytics.tsx(243,29): error TS7031: Binding element 'range' implicitly has an 'any' type.
+app/components/Analytics.tsx(243,36): error TS7031: Binding element 'percent' implicitly has an 'any' type.
+app/components/DailyReport.tsx(2,37): error TS2307: Cannot find module 'react-hook-form' or its corresponding type declarations.
+app/components/DailyReport.tsx(3,29): error TS2307: Cannot find module '@hookform/resolvers/zod' or its corresponding type declarations.
+app/components/DailyReport.tsx(5,69): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/DailyReport.tsx(6,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/DailyReport.tsx(7,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/DailyReport.tsx(8,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/DailyReport.tsx(9,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+app/components/DailyReport.tsx(10,26): error TS2307: Cannot find module '@/components/ui/textarea' or its corresponding type declarations.
+app/components/DailyReport.tsx(11,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+app/components/DailyReport.tsx(12,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/DailyReport.tsx(13,26): error TS2307: Cannot find module '@/components/ui/progress' or its corresponding type declarations.
+app/components/DailyReport.tsx(14,34): error TS2307: Cannot find module '@/components/ui/CircularProgress' or its corresponding type declarations.
+app/components/DailyReport.tsx(16,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/DailyReport.tsx(17,26): error TS2307: Cannot find module '@/components/ui/use-toast' or its corresponding type declarations.
+app/components/DailyReport.tsx(136,45): error TS18046: 'acc' is of type 'unknown'.
+app/components/DailyReport.tsx(136,51): error TS18046: 'val' is of type 'unknown'.
+app/components/DailyReport.tsx(137,24): error TS18046: 'sum' is of type 'unknown'.
+app/components/DailyReport.tsx(202,30): error TS7031: Binding element 'field' implicitly has an 'any' type.
+app/components/DailyReport.tsx(304,30): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Dashboard.tsx(1,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/Dashboard.tsx(3,128): error TS2307: Cannot find module 'recharts' or its corresponding type declarations.
+app/components/Dashboard.tsx(4,38): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/Dashboard.tsx(5,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/Dashboard.tsx(6,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/Dashboard.tsx(158,29): error TS7031: Binding element 'name' implicitly has an 'any' type.
+app/components/Dashboard.tsx(158,35): error TS7031: Binding element 'percent' implicitly has an 'any' type.
+app/components/forms/TeacherForm.tsx(2,25): error TS2307: Cannot find module 'react-hook-form' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(3,29): error TS2307: Cannot find module '@hookform/resolvers/zod' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(5,58): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(6,80): error TS2307: Cannot find module '@/components/ui/dialog' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(7,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(8,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(9,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(10,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(11,26): error TS2307: Cannot find module '@/components/ui/checkbox' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(13,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/forms/TeacherForm.tsx(176,62): error TS7006: Parameter 'value' implicitly has an 'any' type.
+app/components/forms/TeacherForm.tsx(209,61): error TS7006: Parameter 'value' implicitly has an 'any' type.
+app/components/forms/TeacherForm.tsx(247,41): error TS7006: Parameter 'checked' implicitly has an 'any' type.
+app/components/forms/TraineeForm.tsx(2,25): error TS2307: Cannot find module 'react-hook-form' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(3,29): error TS2307: Cannot find module '@hookform/resolvers/zod' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(5,56): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(6,80): error TS2307: Cannot find module '@/components/ui/dialog' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(7,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(8,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(9,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(10,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(11,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(13,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/forms/TraineeForm.tsx(180,63): error TS7006: Parameter 'value' implicitly has an 'any' type.
+app/components/Login.tsx(2,25): error TS2307: Cannot find module 'react-hook-form' or its corresponding type declarations.
+app/components/Login.tsx(3,29): error TS2307: Cannot find module '@hookform/resolvers/zod' or its corresponding type declarations.
+app/components/Login.tsx(5,25): error TS2307: Cannot find module '../context/AuthContext' or its corresponding type declarations.
+app/components/Login.tsx(6,29): error TS2307: Cannot find module '../context/LanguageContext' or its corresponding type declarations.
+app/components/Login.tsx(7,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/Login.tsx(8,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/Login.tsx(9,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+app/components/Login.tsx(10,87): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/Login.tsx(11,41): error TS2307: Cannot find module '@/components/ui/alert' or its corresponding type declarations.
+app/components/Settings.tsx(1,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/Settings.tsx(2,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/Settings.tsx(3,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/Settings.tsx(4,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+app/components/Settings.tsx(5,24): error TS2307: Cannot find module '@/components/ui/switch' or its corresponding type declarations.
+app/components/Settings.tsx(6,58): error TS2307: Cannot find module '@/components/ui/tabs' or its corresponding type declarations.
+app/components/Settings.tsx(7,80): error TS2307: Cannot find module '@/components/ui/dialog' or its corresponding type declarations.
+app/components/Settings.tsx(8,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+app/components/Settings.tsx(11,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/Settings.tsx(12,43): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/Settings.tsx(13,51): error TS2307: Cannot find module '@/lib/permissions' or its corresponding type declarations.
+app/components/Settings.tsx(14,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/Settings.tsx(15,32): error TS2307: Cannot find module '@/services/storage' or its corresponding type declarations.
+app/components/Settings.tsx(63,16): error TS2307: Cannot find module '@/services/firestoreStorage' or its corresponding type declarations.
+app/components/Settings.tsx(69,21): error TS7006: Parameter 'error' implicitly has an 'any' type.
+app/components/Settings.tsx(120,58): error TS2307: Cannot find module '@/services/firestoreStorage' or its corresponding type declarations.
+app/components/Settings.tsx(153,58): error TS2307: Cannot find module '@/services/firestoreStorage' or its corresponding type declarations.
+app/components/Settings.tsx(175,16): error TS2307: Cannot find module '@/services/firestoreStorage' or its corresponding type declarations.
+app/components/Settings.tsx(181,21): error TS7006: Parameter 'error' implicitly has an 'any' type.
+app/components/Settings.tsx(230,30): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Settings.tsx(239,30): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Settings.tsx(265,37): error TS7006: Parameter 'checked' implicitly has an 'any' type.
+app/components/Settings.tsx(279,37): error TS7006: Parameter 'checked' implicitly has an 'any' type.
+app/components/Settings.tsx(293,37): error TS7006: Parameter 'checked' implicitly has an 'any' type.
+app/components/Settings.tsx(601,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/StudentDetails.tsx(2,38): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/StudentDetails.tsx(3,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/StudentDetails.tsx(4,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/StudentDetails.tsx(5,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/StudentDetails.tsx(6,26): error TS2307: Cannot find module '@/components/ui/progress' or its corresponding type declarations.
+app/components/StudentDetails.tsx(7,34): error TS2307: Cannot find module '@/components/ui/CircularProgress' or its corresponding type declarations.
+app/components/StudentDetails.tsx(8,79): error TS2307: Cannot find module '@/components/ui/table' or its corresponding type declarations.
+app/components/StudentDetails.tsx(9,58): error TS2307: Cannot find module '@/components/ui/tabs' or its corresponding type declarations.
+app/components/StudentDetails.tsx(10,170): error TS2307: Cannot find module 'recharts' or its corresponding type declarations.
+app/components/StudentDetails.tsx(12,24): error TS2307: Cannot find module 'date-fns' or its corresponding type declarations.
+app/components/StudentDetails.tsx(13,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/StudentDetails.tsx(265,55): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/components/StudentDetails.tsx(299,60): error TS7006: Parameter 'topic' implicitly has an 'any' type.
+app/components/StudentReports.tsx(4,38): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/StudentReports.tsx(5,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/StudentReports.tsx(6,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/StudentReports.tsx(7,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/StudentReports.tsx(8,79): error TS2307: Cannot find module '@/components/ui/table' or its corresponding type declarations.
+app/components/StudentReports.tsx(9,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/StudentReports.tsx(10,53): error TS2307: Cannot find module '@/components/ui/avatar' or its corresponding type declarations.
+app/components/StudentReports.tsx(12,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/StudentReports.tsx(13,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/StudentReports.tsx(14,19): error TS2307: Cannot find module 'jspdf' or its corresponding type declarations.
+app/components/StudentReports.tsx(15,23): error TS2307: Cannot find module 'jspdf-autotable' or its corresponding type declarations.
+app/components/StudentReports.tsx(74,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/StudentReports.tsx(245,31): error TS7006: Parameter 'topic' implicitly has an 'any' type.
+app/components/StudentReports.tsx(257,31): error TS7006: Parameter 'task' implicitly has an 'any' type.
+app/components/StudentReports.tsx(257,37): error TS7006: Parameter 'index' implicitly has an 'any' type.
+app/components/Tasks.tsx(2,19): error TS2307: Cannot find module 'jspdf' or its corresponding type declarations.
+app/components/Tasks.tsx(3,43): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/Tasks.tsx(4,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/Tasks.tsx(5,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/Tasks.tsx(6,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/Tasks.tsx(7,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+app/components/Tasks.tsx(8,26): error TS2307: Cannot find module '@/components/ui/textarea' or its corresponding type declarations.
+app/components/Tasks.tsx(9,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+app/components/Tasks.tsx(10,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/Tasks.tsx(11,80): error TS2307: Cannot find module '@/components/ui/dialog' or its corresponding type declarations.
+app/components/Tasks.tsx(13,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/Tasks.tsx(14,24): error TS2307: Cannot find module '@/context/AppContext' or its corresponding type declarations.
+app/components/Tasks.tsx(15,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/Tasks.tsx(59,20): error TS7006: Parameter 'task' implicitly has an 'any' type.
+app/components/Tasks.tsx(164,29): error TS7006: Parameter 't' implicitly has an 'any' type.
+app/components/Tasks.tsx(177,39): error TS7006: Parameter 't' implicitly has an 'any' type.
+app/components/Tasks.tsx(182,31): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+app/components/Tasks.tsx(205,35): error TS7006: Parameter 't' implicitly has an 'any' type.
+app/components/Tasks.tsx(211,40): error TS7006: Parameter 't' implicitly has an 'any' type.
+app/components/Tasks.tsx(330,35): error TS7006: Parameter 't' implicitly has an 'any' type.
+app/components/Tasks.tsx(358,34): error TS7006: Parameter 'task' implicitly has an 'any' type.
+app/components/Tasks.tsx(503,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(513,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(523,33): error TS7006: Parameter 'value' implicitly has an 'any' type.
+app/components/Tasks.tsx(529,33): error TS7006: Parameter 'trainee' implicitly has an 'any' type.
+app/components/Tasks.tsx(544,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(556,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(614,32): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(683,48): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+app/components/Tasks.tsx(791,32): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(828,32): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(840,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Tasks.tsx(854,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Teachers.tsx(2,40): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/Teachers.tsx(3,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/Teachers.tsx(4,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/Teachers.tsx(5,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/Teachers.tsx(6,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/Teachers.tsx(7,79): error TS2307: Cannot find module '@/components/ui/table' or its corresponding type declarations.
+app/components/Teachers.tsx(9,90): error TS2307: Cannot find module '@/components/ui/dropdown-menu' or its corresponding type declarations.
+app/components/Teachers.tsx(10,25): error TS2307: Cannot find module '@/components/ui/Filters' or its corresponding type declarations.
+app/components/Teachers.tsx(11,29): error TS2307: Cannot find module '@/components/forms/TeacherForm' or its corresponding type declarations.
+app/components/Teachers.tsx(12,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/Teachers.tsx(100,30): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/Trainees.tsx(3,49): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/Trainees.tsx(4,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/Trainees.tsx(5,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/Trainees.tsx(6,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/Trainees.tsx(7,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/Trainees.tsx(8,79): error TS2307: Cannot find module '@/components/ui/table' or its corresponding type declarations.
+app/components/Trainees.tsx(10,90): error TS2307: Cannot find module '@/components/ui/dropdown-menu' or its corresponding type declarations.
+app/components/Trainees.tsx(11,25): error TS2307: Cannot find module '@/components/ui/Filters' or its corresponding type declarations.
+app/components/Trainees.tsx(12,29): error TS2307: Cannot find module '@/components/forms/TraineeForm' or its corresponding type declarations.
+app/components/Trainees.tsx(13,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/Trainees.tsx(14,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/Trainees.tsx(111,30): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/ui/button.tsx(81,15): error TS2571: Object is of type 'unknown'.
+app/components/ui/toast.tsx(6,10): error TS2300: Duplicate identifier 'cva'.
+app/components/ui/toast.tsx(6,20): error TS2300: Duplicate identifier 'VariantProps'.
+app/components/ui/toast.tsx(43,10): error TS2300: Duplicate identifier 'cva'.
+app/components/ui/toast.tsx(43,20): error TS2300: Duplicate identifier 'VariantProps'.
+app/components/UserManagement.tsx(2,32): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/UserManagement.tsx(3,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/UserManagement.tsx(4,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/UserManagement.tsx(5,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+app/components/UserManagement.tsx(6,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+app/components/UserManagement.tsx(7,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+app/components/UserManagement.tsx(8,80): error TS2307: Cannot find module '@/components/ui/dialog' or its corresponding type declarations.
+app/components/UserManagement.tsx(10,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/UserManagement.tsx(11,24): error TS2307: Cannot find module '@/context/AppContext' or its corresponding type declarations.
+app/components/UserManagement.tsx(12,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/UserManagement.tsx(13,32): error TS2307: Cannot find module '@/services/storage' or its corresponding type declarations.
+app/components/UserManagement.tsx(49,20): error TS7006: Parameter 'u' implicitly has an 'any' type.
+app/components/UserManagement.tsx(52,41): error TS7006: Parameter 'trainee' implicitly has an 'any' type.
+app/components/UserManagement.tsx(69,37): error TS7006: Parameter 'u' implicitly has an 'any' type.
+app/components/UserManagement.tsx(199,35): error TS7006: Parameter 't' implicitly has an 'any' type.
+app/components/UserManagement.tsx(238,34): error TS7006: Parameter 'user' implicitly has an 'any' type.
+app/components/UserManagement.tsx(296,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(307,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(318,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(348,39): error TS7006: Parameter 'value' implicitly has an 'any' type.
+app/components/UserManagement.tsx(354,44): error TS7006: Parameter 'trainee' implicitly has an 'any' type.
+app/components/UserManagement.tsx(379,36): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(389,36): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(440,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(451,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(462,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(490,35): error TS7006: Parameter 'value' implicitly has an 'any' type.
+app/components/UserManagement.tsx(496,35): error TS7006: Parameter 'trainee' implicitly has an 'any' type.
+app/components/UserManagement.tsx(529,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(539,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(549,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(559,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(569,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/UserManagement.tsx(579,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/components/WeeklyReports.tsx(3,58): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(4,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(5,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(6,26): error TS2307: Cannot find module '@/components/ui/progress' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(7,58): error TS2307: Cannot find module '@/components/ui/tabs' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(9,45): error TS2307: Cannot find module '@/types' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(10,29): error TS2307: Cannot find module '@/context/LanguageContext' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(11,25): error TS2307: Cannot find module '@/context/AuthContext' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(12,19): error TS2307: Cannot find module 'jspdf' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(13,23): error TS2307: Cannot find module 'jspdf-autotable' or its corresponding type declarations.
+app/components/WeeklyReports.tsx(56,29): error TS7006: Parameter 'topic' implicitly has an 'any' type.
+app/components/WeeklyReports.tsx(218,33): error TS7006: Parameter 'topic' implicitly has an 'any' type.
+app/components/WeeklyReports.tsx(230,33): error TS7006: Parameter 'task' implicitly has an 'any' type.
+app/components/WeeklyReports.tsx(230,39): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+app/components/WeeklyReports.tsx(546,52): error TS7006: Parameter 'topic' implicitly has an 'any' type.
+app/components/WeeklyReports.tsx(557,52): error TS7006: Parameter 'task' implicitly has an 'any' type.
+app/components/WeeklyReports.tsx(557,58): error TS7006: Parameter 'idx' implicitly has an 'any' type.
