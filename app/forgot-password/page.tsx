@@ -11,10 +11,9 @@ export default function ForgotPasswordPage() {
   const router = useRouter();
   const { t } = useI18n();
   const [step, setStep] = useState<"send" | "reset">("send");
-  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [channel, setChannel] = useState<"sms" | "whatsapp">("sms");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -29,7 +28,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, channel }),
+        body: JSON.stringify({ identifier }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -58,7 +57,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/forgot-password/reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code, newPassword }),
+        body: JSON.stringify({ code, newPassword }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -80,7 +79,7 @@ export default function ForgotPasswordPage() {
           {t("resetPassword")}
         </h1>
         <p className="mb-6 text-sm text-slate-500">
-          {t("enterRegisteredPhone")}
+          {t("enterRegisteredIdentifier")}
         </p>
 
         {error && <p className="mb-4 text-red-600 text-sm">{error}</p>}
@@ -94,28 +93,13 @@ export default function ForgotPasswordPage() {
         {step === "send" ? (
           <form onSubmit={handleSend} className="space-y-5">
             <Input
-              label={t("phone")}
-              type="tel"
+              label={t("identifierLabel")}
+              type="text"
               required
-              placeholder="+20 1XX XXX XXXX"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              placeholder="admin / admin@eduflow.local / +20 1XX XXX XXXX"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
             />
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                {t("sendCodeVia")}
-              </label>
-              <select
-                value={channel}
-                onChange={(e) =>
-                  setChannel(e.target.value as "sms" | "whatsapp")
-                }
-                className="w-full rounded-lg border border-slate-300 px-4 py-2"
-              >
-                <option value="sms">SMS</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
-            </div>
             <Button type="submit" disabled={loading}>
               {loading ? t("sending") : t("sendCode")}
             </Button>
@@ -126,6 +110,8 @@ export default function ForgotPasswordPage() {
               label={t("verificationCode")}
               type="text"
               required
+              inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={6}
               placeholder="123456"
               value={code}
@@ -135,7 +121,7 @@ export default function ForgotPasswordPage() {
               label={t("newPassword")}
               type="password"
               required
-              minLength={6}
+              minLength={8}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />

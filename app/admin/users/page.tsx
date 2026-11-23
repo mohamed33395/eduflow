@@ -13,8 +13,6 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
 
     fetch("/api/admin/users", { credentials: "include" })
       .then(async (res) => {

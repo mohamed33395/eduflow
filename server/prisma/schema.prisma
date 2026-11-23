@@ -1,0 +1,708 @@
+// EduFlow — PostgreSQL schema
+// Replaces Firestore. Mirrors app/types/index.ts + teacher compensation model.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ────────────────────────────── Enums ──────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  CENTER_OWNER
+  COURSE_OWNER
+  TEACHER
+  STUDENT
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum EducationLevel {
+  KINDERGARTEN
+  PRIMARY
+  MIDDLE
+  HIGH
+}
+
+enum LessonFileType {
+  PDF
+  IMAGE
+  VIDEO
+  OTHER
+}
+
+enum SubmissionStatus {
+  PENDING
+  GRADED
+}
+
+enum TaskSubmissionStatus {
+  SUBMITTED
+  REJECTED
+  GRADED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum CompensationType {
+  FIXED
+  PERCENTAGE
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  PAID
+}
+
+// ────────────────────────────── Auth & Users ──────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String?  @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  phone        String?
+  role         Role
+  avatarUrl    String?  @map("avatar_url")
+  centerId     String?  @map("center_id")
+  courseId     String?  @map("course_id")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  center          Center?              @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  studentProfile  StudentProfile?
+  teacherProfile  TeacherProfile?
+  refreshTokens   RefreshToken[]
+  resetTokens     PasswordResetToken[]
+  ownedCenters    Center[]             @relation("CenterOwner")
+  loginStepTokens LoginStepToken[]
+  loginOtps       LoginOtp[]
+  ownedCourses    Course[]             @relation("CourseOwner")
+  attendances     AttendanceRecord[]
+  createdPayouts  TeacherPayout[]      @relation("PayoutApprover")
+  notifications   Notification[]
+
+  @@map("users")
+  @@index([centerId])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
+  @@index([userId])
+}
+
+// Multi-stage auth — step token tracking (15 min TTL)
+model LoginStepToken {
+  id         String         @id
+  tokenHash  String         @unique @map("token_hash")
+  userId     String?        @map("user_id")
+  user       User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime       @map("expires_at")
+  consumedAt DateTime?      @map("consumed_at")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  otps       LoginOtp[]
+
+  @@map("login_step_tokens")
+  @@index([userId])
+}
+
+// Multi-stage auth — OTP codes (10 min TTL, max 5 attempts)
+model LoginOtp {
+  id          String         @id
+  tokenHash   String         @unique @map("token_hash")
+  stepTokenId String         @map("step_token_id")
+  stepToken   LoginStepToken @relation(fields: [stepTokenId], references: [id], onDelete: Cascade)
+  userId      String         @map("user_id")
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel     String
+  expiresAt   DateTime       @map("expires_at")
+  usedAt      DateTime?      @map("used_at")
+  attempts    Int            @default(0)
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  @@map("login_otps")
+  @@index([stepTokenId])
+  @@index([userId])
+}
+
+// ────────────────────────────── Centers ──────────────────────────────
+
+model Center {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  logo                String?
+  email               String
+  phone               String?
+  address             String?
+  status              Status   @default(ACTIVE)
+  ownerId             String   @map("owner_id")
+  bundlePrice         Float?   @map("bundle_price")
+  monthlyFee          Float?   @map("monthly_fee")
+  maxStudentsPerClass Int      @default(30) @map("max_students_per_class")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  owner         User                @relation("CenterOwner", fields: [ownerId], references: [id])
+  users         User[]
+  courses       Course[]
+  classes       Class[]
+  subjects      Subject[]
+  centerSubjects CenterSubject[]
+  yearPackages  CenterYearPackage[]
+  studentProfiles StudentProfile[]
+  teacherProfiles TeacherProfile[]
+  billings      CenterBilling[]
+  tasks         Task[]
+
+  @@map("centers")
+  @@index([ownerId])
+}
+
+// Platform billing — whether the center paid its monthly platform fee
+model CenterBilling {
+  id        String        @id @default(cuid())
+  centerId  String        @map("center_id")
+  center    Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  year      Int
+  month     Int // 1-12
+  amount    Float         @default(0)
+  status    BillingStatus @default(PENDING)
+  paidAt    DateTime?     @map("paid_at")
+  notes     String?
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@unique([centerId, year, month])
+  @@map("center_billings")
+  @@index([centerId])
+}
+
+enum BillingStatus {
+  PENDING
+  PAID
+  WAIVED
+}
+
+// Subject priced per level/grade/track inside a center's settings
+model CenterSubject {
+  id       String         @id @default(cuid())
+  centerId String         @map("center_id")
+  center   Center         @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  level    EducationLevel
+  grade    Int
+  track    String?
+  name     String
+  price    Float
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@map("center_subjects")
+  @@index([centerId])
+}
+
+// Year package = level + grade (+track) bundle sold by a center
+model CenterYearPackage {
+  id                  String         @id @default(cuid())
+  centerId            String         @map("center_id")
+  center              Center         @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  level               EducationLevel
+  grade               Int
+  track               String?
+  teacherId           String?        @map("teacher_id")
+  teacher             TeacherProfile? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  bundlePrice         Float?         @map("bundle_price")
+  maxStudentsPerClass Int            @default(30) @map("max_students_per_class")
+  createdAt           DateTime       @default(now()) @map("created_at")
+
+  subjects    CenterYearSubject[]
+  gradeGroups CenterGradeGroup[]
+
+  @@map("center_year_packages")
+  @@index([centerId])
+}
+
+model CenterYearSubject {
+  id          String            @id @default(cuid())
+  packageId   String            @map("package_id")
+  package     CenterYearPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  level       EducationLevel
+  grade       Int
+  track       String?
+  name        String
+  price       Float
+
+  @@map("center_year_subjects")
+  @@index([packageId])
+}
+
+model CenterGradeGroup {
+  id          String            @id @default(cuid())
+  centerId    String?           @map("center_id")
+  packageId   String?           @map("package_id")
+  package     CenterYearPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  level       EducationLevel
+  grade       Int
+  count       Int               @default(1)
+
+  @@map("center_grade_groups")
+  @@index([centerId])
+  @@index([packageId])
+}
+
+// ────────────────────────────── Academic structure ──────────────────────────────
+
+model Course {
+  id          String         @id @default(cuid())
+  name        String
+  slug        String         @unique
+  type        String
+  level       EducationLevel
+  gradeFrom   Int            @map("grade_from")
+  gradeTo     Int            @map("grade_to")
+  description String
+  content     String?
+  coverImage  String?        @map("cover_image")
+  ownerId     String         @map("owner_id")
+  centerId    String?        @map("center_id")
+  status      Status         @default(ACTIVE)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  owner           User             @relation("CourseOwner", fields: [ownerId], references: [id])
+  center          Center?          @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  subjects        Subject[]
+  enrollments     Enrollment[]
+  teachers        TeacherProfile[] @relation("TeacherCourses")
+  lessons         Lesson[]
+  assignments     Assignment[]
+  attendances     AttendanceRecord[]
+  payments        Payment[]
+
+  @@map("courses")
+  @@index([ownerId])
+  @@index([centerId])
+}
+
+model Class {
+  id          String         @id @default(cuid())
+  name        String
+  level       EducationLevel
+  gradeFrom   Int            @map("grade_from")
+  gradeTo     Int            @map("grade_to")
+  centerId    String?        @map("center_id")
+  status      Status         @default(ACTIVE)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  center      Center?          @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  subjects    Subject[]
+  students    StudentProfile[]
+  teachers    TeacherProfile[] @relation("TeacherClasses")
+
+  @@map("classes")
+  @@index([centerId])
+}
+
+model Subject {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  centerId    String?        @map("center_id")
+  classId     String?        @map("class_id")
+  courseId    String?        @map("course_id")
+  teacherId   String?        @map("teacher_id")
+  status      Status         @default(ACTIVE)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  center   Center?         @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  class    Class?          @relation(fields: [classId], references: [id], onDelete: SetNull)
+  course   Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  teacher  TeacherProfile? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  studentAssignments StudentSubjectAssignment[]
+  teacherAssignments TeacherSubjectAssignment[]
+  tasks              Task[]
+
+  @@map("subjects")
+  @@index([centerId])
+  @@index([classId])
+  @@index([teacherId])
+}
+
+// ────────────────────────────── Profiles ──────────────────────────────
+
+// Profile id == User id (1:1)
+model StudentProfile {
+  id              String         @id
+  user            User           @relation(fields: [id], references: [id], onDelete: Cascade)
+  centerId        String?        @map("center_id")
+  center          Center?        @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  level           EducationLevel?
+  grade           Int?
+  classId         String?        @map("class_id")
+  class           Class?         @relation(fields: [classId], references: [id], onDelete: SetNull)
+  primaryTeacherId String?       @map("primary_teacher_id")
+  primaryTeacher  TeacherProfile? @relation("PrimaryTeacher", fields: [primaryTeacherId], references: [id], onDelete: SetNull)
+  parentName      String?        @map("parent_name")
+  parentPhone     String?        @map("parent_phone")
+  gender          Gender?
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  courses             Enrollment[]
+  subjectAssignments  StudentSubjectAssignment[]
+  submissions         Submission[]
+  payments            Payment[]
+  taskRecipients      TaskRecipient[]
+  taskSubmissions     TaskSubmission[]
+
+  @@map("student_profiles")
+  @@index([centerId])
+  @@index([classId])
+}
+
+model TeacherProfile {
+  id                 String           @id
+  user               User             @relation(fields: [id], references: [id], onDelete: Cascade)
+  centerId           String?          @map("center_id")
+  center             Center?          @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  // ── Compensation (set by admin when adding the teacher) ──
+  compensationType   CompensationType @default(FIXED) @map("compensation_type")
+  fixedAmount        Float?           @map("fixed_amount")        // monthly fixed salary
+  commissionPercent  Float?           @map("commission_percent")  // e.g. 60 = 60% of collected revenue
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  courses             Course[]              @relation("TeacherCourses")
+  classes             Class[]               @relation("TeacherClasses")
+  subjects            Subject[]             // primary teacher of a subject
+  subjectAssignments  TeacherSubjectAssignment[]
+  payouts             TeacherPayout[]
+  primaryStudents     StudentProfile[]      @relation("PrimaryTeacher")
+  yearPackages        CenterYearPackage[]
+  tasks               Task[]
+
+  @@map("teacher_profiles")
+  @@index([centerId])
+}
+
+// Student enrolled in a course
+model Enrollment {
+  id        String         @id @default(cuid())
+  studentId String         @map("student_id")
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId  String         @map("course_id")
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@unique([studentId, courseId])
+  @@map("enrollments")
+  @@index([courseId])
+}
+
+// Student assigned to subject for level/grade range
+model StudentSubjectAssignment {
+  id        String         @id @default(cuid())
+  studentId String         @map("student_id")
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId String         @map("subject_id")
+  subject   Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  level     EducationLevel
+  gradeFrom Int            @map("grade_from")
+  gradeTo   Int            @map("grade_to")
+  track     String?
+
+  @@unique([studentId, subjectId])
+  @@map("student_subject_assignments")
+  @@index([subjectId])
+}
+
+model TeacherSubjectAssignment {
+  id        String         @id @default(cuid())
+  teacherId String         @map("teacher_id")
+  teacher   TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subjectId String         @map("subject_id")
+  subject   Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  level     EducationLevel
+  gradeFrom Int            @map("grade_from")
+  gradeTo   Int            @map("grade_to")
+  track     String?
+
+  @@unique([teacherId, subjectId, level])
+  @@map("teacher_subject_assignments")
+  @@index([subjectId])
+}
+
+// ────────────────────────────── Content ──────────────────────────────
+
+model Lesson {
+  id          String   @id @default(cuid())
+  courseId    String   @map("course_id")
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  videoUrl    String?  @map("video_url")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  files LessonFile[]
+  tasks Task[]
+
+  @@map("lessons")
+  @@index([courseId])
+}
+
+model LessonFile {
+  id       String         @id @default(cuid())
+  lessonId String         @map("lesson_id")
+  lesson   Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  name     String
+  url      String
+  type     LessonFileType
+
+  @@map("lesson_files")
+  @@index([lessonId])
+}
+
+// ────────────────────────────── Assignments ──────────────────────────────
+
+model Assignment {
+  id          String   @id @default(cuid())
+  courseId    String   @map("course_id")
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacherId   String   @map("teacher_id")   // TeacherProfile.id (== user id)
+  title       String
+  description String
+  deadline    DateTime
+  maxGrade    Float?   @map("max_grade")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  submissions Submission[]
+
+  @@map("assignments")
+  @@index([courseId])
+  @@index([teacherId])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  assignmentId String           @map("assignment_id")
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String           @map("student_id")
+  student      StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fileUrl      String?          @map("file_url")
+  text         String?
+  grade        Float?
+  feedback     String?
+  status       SubmissionStatus @default(PENDING)
+  submittedAt  DateTime         @default(now()) @map("submitted_at")
+
+  @@unique([assignmentId, studentId])
+  @@map("submissions")
+  @@index([studentId])
+}
+
+// ────────────────────────────── Tasks (exams) ──────────────────────────────
+
+// An exam/worksheet assigned by the center to a subject's students.
+// Flow: center creates → recipients get a notification → students upload a
+// solution → reviewer (teacher) accepts+grades or rejects → student resubmits.
+model Task {
+  id          String         @id @default(cuid())
+  centerId    String         @map("center_id")
+  center      Center         @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  subjectId   String         @map("subject_id")
+  subject     Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacherId   String         @map("teacher_id")
+  teacher     TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  lessonId    String?        @map("lesson_id")
+  lesson      Lesson?        @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  title       String
+  examFileUrl String         @map("exam_file_url")
+  createdById String         @map("created_by_id")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  recipients  TaskRecipient[]
+  submissions TaskSubmission[]
+
+  @@map("tasks")
+  @@index([centerId])
+  @@index([teacherId])
+}
+
+// Snapshot of which students were notified — drives the submitted/pending counters.
+model TaskRecipient {
+  id        String         @id @default(cuid())
+  taskId    String         @map("task_id")
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  studentId String         @map("student_id")
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@unique([taskId, studentId])
+  @@map("task_recipients")
+  @@index([studentId])
+}
+
+model TaskSubmission {
+  id           String               @id @default(cuid())
+  taskId       String               @map("task_id")
+  task         Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  studentId    String               @map("student_id")
+  student      StudentProfile       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fileUrl      String               @map("file_url")
+  status       TaskSubmissionStatus @default(SUBMITTED)
+  grade        Float?
+  feedback     String?
+  attempts     Int                  @default(1)
+  submittedAt  DateTime             @default(now()) @map("submitted_at")
+  reviewedAt   DateTime?            @map("reviewed_at")
+  resultSentAt DateTime?            @map("result_sent_at")
+
+  @@unique([taskId, studentId])
+  @@map("task_submissions")
+  @@index([studentId])
+}
+
+// ────────────────────────────── Notifications ──────────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // TASK_ASSIGNED | TASK_SUBMITTED | TASK_REJECTED | TASK_GRADED
+  title     String
+  body      String?
+  data      Json?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("notifications")
+  @@index([userId, readAt])
+}
+
+// ────────────────────────────── Attendance & Payments ──────────────────────────────
+
+model AttendanceRecord {
+  id       String           @id @default(cuid())
+  userId   String           @map("user_id")
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId String?          @map("course_id")
+  course   Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  date     DateTime         @db.Date
+  status   AttendanceStatus
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@map("attendance_records")
+  @@index([userId, date])
+  @@index([courseId, date])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  studentId String   @map("student_id")
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId  String   @map("course_id")
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  amount    Float
+  paid      Float    @default(0)
+  remaining Float
+  dueDate   DateTime? @map("due_date")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("payments")
+  @@index([studentId])
+  @@index([courseId])
+  @@index([createdAt])
+}
+
+// ────────────────────────────── Teacher compensation ──────────────────────────────
+
+// Monthly settlement per teacher.
+// FIXED      → dueAmount = fixedAmount
+// PERCENTAGE → dueAmount = collectedRevenue * commissionPercent / 100
+// collectedRevenue = sum(payments.paid) for courses taught by this teacher in the period.
+model TeacherPayout {
+  id               String       @id @default(cuid())
+  teacherId        String       @map("teacher_id")
+  teacher          TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  periodStart      DateTime     @map("period_start") @db.Date
+  periodEnd        DateTime     @map("period_end") @db.Date
+  compensationType CompensationType @map("compensation_type")
+  fixedAmount      Float?       @map("fixed_amount")
+  commissionPercent Float?      @map("commission_percent")
+  collectedRevenue Float        @default(0) @map("collected_revenue")
+  dueAmount        Float        @default(0) @map("due_amount")
+  status           PayoutStatus @default(PENDING)
+  approvedById     String?      @map("approved_by_id")
+  approvedBy       User?        @relation("PayoutApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  paidAt           DateTime?    @map("paid_at")
+  notes            String?
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  @@unique([teacherId, periodStart])
+  @@map("teacher_payouts")
+  @@index([status])
+}
+
+// Uploaded file blobs (local-storage fallback when S3 isn't configured).
+model StoredFile {
+  key         String   @id
+  contentType String   @map("content_type")
+  data        Bytes
+  size        Int
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("stored_files")
+}
+
+

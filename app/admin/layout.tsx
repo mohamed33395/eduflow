@@ -5,7 +5,7 @@ import {
   Building2,
   BookOpen,
   Users,
-  Settings,
+  CreditCard,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -24,15 +24,16 @@ export default async function AdminLayout({
           href: "/admin",
           label: t("dashboard"),
           icon: <LayoutDashboard size={18} />,
+          group: t("overview"),
         },
         { href: "/admin/centers", label: t("centers"), icon: <Building2 size={18} /> },
         { href: "/admin/courses", label: t("courses"), icon: <BookOpen size={18} /> },
-        { href: "/admin/users", label: t("users"), icon: <Users size={18} /> },
         {
-          href: "/admin/settings",
-          label: t("settings"),
-          icon: <Settings size={18} />,
+          href: "/admin/payments",
+          label: t("payments"),
+          icon: <CreditCard size={18} />,
         },
+        { href: "/admin/users", label: t("users"), icon: <Users size={18} /> },
       ]}
     >
       {children}

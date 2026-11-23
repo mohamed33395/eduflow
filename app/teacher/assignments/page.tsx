@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { useAuth } from "@/app/hooks/useAuth";
 import { getTeacherById } from "@/app/services/teachers";
 import { getAssignments, createAssignment } from "@/app/services/assignments";
 import { Table } from "@/app/components/ui/table";
@@ -16,7 +16,6 @@ export default function TeacherAssignmentsPage() {
   const { t } = useI18n();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [courses, setCourses] = useState<{ id: string; name: string }[]>([]);
-  const [teacherId, setTeacherId] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     courseId: "",
@@ -26,11 +25,12 @@ export default function TeacherAssignmentsPage() {
     maxGrade: 100,
   });
 
+  const { user } = useAuth();
+  const teacherId = user?.uid ?? "";
+
   useEffect(() => {
-    const auth = getAuth();
-    const uid = auth.currentUser?.uid;
+    const uid = user?.uid;
     if (!uid) return;
-    setTeacherId(uid);
     getTeacherById(uid).then(async (t) => {
       if (!t) return;
       const { getCourseById } = await import("@/app/services/courses");
@@ -50,7 +50,7 @@ export default function TeacherAssignmentsPage() {
       }
       setAssignments(all);
     });
-  }, []);
+  }, [user?.uid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

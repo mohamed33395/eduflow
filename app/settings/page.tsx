@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/app/components/ui/input";
 import { Button } from "@/app/components/ui/button";
+import { ImageUpload } from "@/app/components/ui/ImageUpload";
 import { useI18n } from "@/app/lib/i18n/client";
 
 export default function SettingsPage() {
@@ -108,13 +109,19 @@ export default function SettingsPage() {
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
           />
-          <Input
-            label={t("avatarUrl")}
-            type="url"
-            value={form.avatarUrl}
-            onChange={(e) => setForm((prev) => ({ ...prev, avatarUrl: e.target.value }))}
-            placeholder="https://..."
-          />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              {t("avatarUrl")}
+            </label>
+            <ImageUpload
+              folder="avatars"
+              value={form.avatarUrl}
+              compact
+              onUpload={(url) =>
+                setForm((prev) => ({ ...prev, avatarUrl: url }))
+              }
+            />
+          </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"

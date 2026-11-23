@@ -1,7 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionUser } from "@/app/lib/auth-cookies";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import type { AppUser, Student, EducationLevel, SubjectAssignment } from "@/app/types";
+import { apiErrorResponse, apiFetchServer } from "@/app/lib/api-server";
+import {
+  toBackendSubjectAssignment,
+  usernameFromEmail,
+} from "@/app/lib/mappers";
+import type { Student, EducationLevel, SubjectAssignment } from "@/app/types";
 
 const ALLOWED_LEVELS: EducationLevel[] = [
   "kindergarten",
@@ -20,15 +24,6 @@ export async function POST(req: NextRequest) {
   }
   if (!currentUser.centerId) {
     return NextResponse.json({ error: "No center assigned" }, { status: 400 });
-  }
-
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-  if (!adminAuth || !adminDb) {
-    return NextResponse.json(
-      { error: "Admin not configured" },
-      { status: 500 }
-    );
   }
 
   const body = (await req.json()) as Record<string, unknown>;
@@ -100,82 +95,51 @@ export async function POST(req: NextRequest) {
     typeof avatarUrl === "string" ? avatarUrl || undefined : undefined;
 
   try {
-    let uid: string;
-    try {
-      const userRecord = await adminAuth.getUserByEmail(cleanEmail);
-      uid = userRecord.uid;
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code;
-      if (code === "auth/user-not-found") {
-        const newUser = await adminAuth.createUser({
-          email: cleanEmail,
-          password,
-          displayName: cleanName,
-        });
-        uid = newUser.uid;
-      } else {
-        throw err;
-      }
+    const created = await apiFetchServer<{ id: string }>("/students", {
+      method: "POST",
+      body: {
+        name: cleanName,
+        username: usernameFromEmail(cleanEmail),
+        email: cleanEmail,
+        password,
+        phone: cleanPhone || undefined,
+        centerId: currentUser.centerId,
+        level: cleanLevel?.toUpperCase(),
+        grade: cleanGrade,
+        classId: cleanClassId,
+        parentName: cleanParentName || undefined,
+        parentPhone: cleanParentPhone || undefined,
+        gender: cleanGender?.toUpperCase(),
+        primaryTeacherId: cleanTeacherId,
+        courseIds: cleanCourses.length ? cleanCourses : undefined,
+      },
+    });
+    const uid = created.id;
+
+    if (cleanAvatarUrl) {
+      await apiFetchServer(`/users/${uid}`, {
+        method: "PATCH",
+        body: { avatarUrl: cleanAvatarUrl },
+      }).catch(() => null);
     }
 
-    const userDoc = await adminDb.collection("users").doc(uid).get();
-    if (userDoc.exists) {
-      const existing = userDoc.data() as AppUser | undefined;
-      if (existing?.role && existing.role !== "student") {
-        return NextResponse.json(
-          { error: "Email already used by another role" },
-          { status: 400 }
-        );
-      }
-      if (existing?.centerId && existing.centerId !== currentUser.centerId) {
-        return NextResponse.json(
-          { error: "Email belongs to another center" },
-          { status: 400 }
-        );
-      }
+    if (cleanSubjectAssignments.length) {
+      await apiFetchServer(`/students/${uid}/subject-assignments`, {
+        method: "PUT",
+        body: {
+          assignments: cleanSubjectAssignments.map(toBackendSubjectAssignment),
+        },
+      });
     }
 
-    const studentDoc = await adminDb.collection("students").doc(uid).get();
-    if (studentDoc.exists) {
-      const existingCenter = (studentDoc.data() as { centerId?: string })
-        .centerId;
-      if (existingCenter === currentUser.centerId) {
-        return NextResponse.json(
-          { error: "Student already exists in this center" },
-          { status: 400 }
-        );
-      }
-      if (existingCenter && existingCenter !== currentUser.centerId) {
-        return NextResponse.json(
-          { error: "Email belongs to another center" },
-          { status: 400 }
-        );
-      }
-    }
-
-    await adminAuth.updateUser(uid, { password, displayName: cleanName });
-
-    const userData: AppUser = {
-      uid,
+    const student: Student = {
+      id: uid,
       name: cleanName,
+      username: usernameFromEmail(cleanEmail),
       email: cleanEmail,
       phone: cleanPhone || undefined,
-      role: "student",
-      centerId: currentUser.centerId,
-      avatarUrl: cleanAvatarUrl,
-      createdAt: new Date().toISOString(),
-    };
-
-    await adminDb.collection("users").doc(uid).set(userData, { merge: true });
-
-    const studentData = {
-      uid,
-      name: cleanName,
-      username: cleanName,
-      email: cleanEmail,
-      phone: cleanPhone,
-      parentName: cleanParentName,
-      parentPhone: cleanParentPhone,
+      parentName: cleanParentName || undefined,
+      parentPhone: cleanParentPhone || undefined,
       centerId: currentUser.centerId,
       level: cleanLevel,
       grade: cleanGrade,
@@ -186,35 +150,12 @@ export async function POST(req: NextRequest) {
       subjectIds: cleanSubjectIds,
       subjectAssignments: cleanSubjectAssignments,
       avatarUrl: cleanAvatarUrl,
-    };
-
-    const student: Student = {
-      id: uid,
-      ...studentData,
       createdAt: new Date().toISOString(),
     };
-
-    await adminDb.collection("students").doc(uid).set({
-      ...studentData,
-      createdAt: student.createdAt,
-    });
 
     return NextResponse.json({ uid, student });
   } catch (err: unknown) {
     console.error("[api/center/students] create failed:", err);
-    const code = (err as { code?: string }).code;
-    if (
-      code === "auth/email-already-exists" ||
-      code === "auth/invalid-email"
-    ) {
-      return NextResponse.json(
-        { error: "Email already in use" },
-        { status: 400 }
-      );
-    }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Create failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Create failed");
   }
 }

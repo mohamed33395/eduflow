@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { useAuth } from "@/app/hooks/useAuth";
 import { getTeacherById } from "@/app/services/teachers";
 import { getSubmissions, gradeSubmission, getAssignments } from "@/app/services/assignments";
 import { Table } from "@/app/components/ui/table";
@@ -17,9 +17,10 @@ export default function TeacherSubmissionsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [grading, setGrading] = useState<Record<string, { grade: string; feedback: string }>>({});
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    const auth = getAuth();
-    const uid = auth.currentUser?.uid;
+    const uid = user?.uid;
     if (!uid) return;
     getTeacherById(uid).then(async (t) => {
       if (!t) return;
@@ -37,7 +38,7 @@ export default function TeacherSubmissionsPage() {
       }
       setSubmissions(allSubmissions);
     });
-  }, []);
+  }, [user?.uid]);
 
   const handleGrade = async (id: string) => {
     const g = grading[id];

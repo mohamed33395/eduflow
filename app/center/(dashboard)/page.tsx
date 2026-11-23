@@ -1,5 +1,13 @@
 import { getSessionUser } from "@/app/lib/auth-cookies";
-import { getAdminDb } from "@/app/lib/firebase-admin";
+import { ApiError } from "@/app/lib/api";
+import { apiFetchServer, fetchAllPages } from "@/app/lib/api-server";
+import {
+  toCenter,
+  toPayment,
+  toStudent,
+  toTeacher,
+  unwrapList,
+} from "@/app/lib/mappers";
 import { getI18n } from "@/app/lib/i18n/server";
 import { StatsCard } from "@/app/components/ui/StatsCard";
 import {
@@ -12,122 +20,65 @@ import {
 } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Table } from "@/app/components/ui/table";
+import { BarChart, DonutChart } from "@/app/components/ui/charts";
 import { formatCurrency } from "@/app/lib/utils";
 import { Users, UserCheck, DollarSign, Building2 } from "lucide-react";
-import type { Center, Student, Teacher, Payment, SubjectAssignment } from "@/app/types";
-import { Timestamp } from "firebase-admin/firestore";
+import type { Center, Student, Teacher, Payment } from "@/app/types";
 
-function toCenter(id: string, data: Record<string, unknown>): Center {
-  return {
-    id,
-    name: (data.name as string) ?? "",
-    slug: (data.slug as string) ?? "",
-    logo: data.logo as string | undefined,
-    email: (data.email as string) ?? "",
-    phone: data.phone as string | undefined,
-    address: data.address as string | undefined,
-    status: (data.status as Center["status"]) ?? "active",
-    ownerId: (data.ownerId as string) ?? "",
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
-
-function toStudent(id: string, data: Record<string, unknown>): Student {
-  return {
-    id,
-    name: (data.name as string) ?? "",
-    username: (data.username as string) ?? "",
-    email: data.email as string | undefined,
-    centerId: data.centerId as string | undefined,
-    classId: data.classId as string | undefined,
-    subjectIds: (data.subjectIds as string[]) ?? [],
-    subjectAssignments:
-      (data.subjectAssignments as unknown as SubjectAssignment[]) ?? [],
-    courses: (data.courses as string[]) ?? [],
-    avatarUrl: data.avatarUrl as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
-
-function toTeacher(id: string, data: Record<string, unknown>): Teacher {
-  return {
-    id,
-    name: (data.name as string) ?? "",
-    email: (data.email as string) ?? "",
-    assignedCourses: (data.assignedCourses as string[]) ?? [],
-    assignedClassIds: (data.assignedClassIds as string[]) ?? [],
-    assignedSubjectIds: (data.assignedSubjectIds as string[]) ?? [],
-    subjectAssignments:
-      (data.subjectAssignments as unknown as SubjectAssignment[]) ?? [],
-    centerId: data.centerId as string | undefined,
-    avatarUrl: data.avatarUrl as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
-
-function toPayment(id: string, data: Record<string, unknown>): Payment {
-  return {
-    id,
-    studentId: (data.studentId as string) ?? "",
-    courseId: (data.courseId as string) ?? "",
-    amount: (data.amount as number) ?? 0,
-    paid: (data.paid as number) ?? 0,
-    remaining: (data.remaining as number) ?? 0,
-    dueDate: data.dueDate as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
+type Row = Record<string, unknown>;
 
 export default async function CenterDashboardPage() {
-  const { t } = await getI18n();
+  const { t, locale } = await getI18n();
   const user = await getSessionUser();
   const centerId = user?.centerId ?? "";
-
-  const adminDb = getAdminDb();
 
   let center: Center | null = null;
   let students: Student[] = [];
   let teachers: Teacher[] = [];
   let payments: Payment[] = [];
 
-  if (adminDb && centerId) {
-    const [centerSnap, studentsSnap, teachersSnap, paymentsSnap] =
+  if (centerId) {
+    const [centerRow, studentsData, teachersData, paymentsRows] =
       await Promise.all([
-        adminDb.collection("centers").doc(centerId).get(),
-        adminDb.collection("students").where("centerId", "==", centerId).get(),
-        adminDb.collection("teachers").where("centerId", "==", centerId).get(),
-        adminDb.collection("payments").get(),
+        apiFetchServer<Row>(`/centers/${centerId}`).catch((err) =>
+          err instanceof ApiError && err.status === 404 ? null : Promise.reject(err)
+        ),
+        apiFetchServer<unknown>(`/students?centerId=${centerId}&limit=100`),
+        apiFetchServer<unknown>(`/teachers?centerId=${centerId}&limit=100`),
+        fetchAllPages<Row>("/payments").catch(() => [] as Row[]),
       ]);
 
-    center = centerSnap.exists
-      ? toCenter(centerSnap.id, centerSnap.data() as Record<string, unknown>)
-      : null;
-    students = studentsSnap.docs.map((d) =>
-      toStudent(d.id, d.data() as Record<string, unknown>)
-    );
-    teachers = teachersSnap.docs.map((d) =>
-      toTeacher(d.id, d.data() as Record<string, unknown>)
-    );
-    payments = paymentsSnap.docs.map((d) =>
-      toPayment(d.id, d.data() as Record<string, unknown>)
-    );
+    center = centerRow ? toCenter(centerRow) : null;
+    students = unwrapList<Row>(studentsData).map(toStudent);
+    teachers = unwrapList<Row>(teachersData).map(toTeacher);
+    payments = paymentsRows.map(toPayment);
   }
 
-  const paid = payments
-    .filter((p) => students.some((s) => s.id === p.studentId))
-    .reduce((sum, p) => sum + p.paid, 0);
+  const centerPayments = payments.filter((p) =>
+    students.some((s) => s.id === p.studentId)
+  );
+  const paid = centerPayments.reduce((sum, p) => sum + p.paid, 0);
+  const outstanding = centerPayments.reduce((sum, p) => sum + p.remaining, 0);
+
+  // last 6 months of collected revenue for this center
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    return { year: d.getFullYear(), month: d.getMonth(), total: 0 };
+  });
+  const monthIndex = new Map(months.map((m, i) => [`${m.year}-${m.month}`, i]));
+  for (const p of centerPayments) {
+    const created = new Date(p.createdAt);
+    if (Number.isNaN(created.getTime())) continue;
+    const i = monthIndex.get(`${created.getFullYear()}-${created.getMonth()}`);
+    if (i !== undefined) months[i].total += p.paid;
+  }
+  const monthlyRevenue = months.map((m) => ({
+    label: new Date(m.year, m.month).toLocaleDateString(locale, {
+      month: "short",
+    }),
+    value: m.total,
+  }));
 
   const stats = [
     {
@@ -161,6 +112,39 @@ export default async function CenterDashboardPage() {
         {stats.map((s) => (
           <StatsCard key={s.title} title={s.title} value={s.value} icon={s.icon} />
         ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("paymentBreakdown")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DonutChart
+              data={[
+                { label: t("collected"), value: paid, color: "#0f766e" },
+                {
+                  label: t("outstanding"),
+                  value: outstanding,
+                  color: "#d9a441",
+                },
+              ]}
+              centerLabel={t("payments")}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("monthlyRevenue")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BarChart
+              data={monthlyRevenue}
+              formatValue={(v) => formatCurrency(v)}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

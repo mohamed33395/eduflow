@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { StatsCard } from "@/app/components/ui/StatsCard";
 import { Card } from "@/app/components/ui/card";
+import { StatusBadge } from "@/app/components/ui/status-badge";
 import { formatCurrency } from "@/app/lib/utils";
 import { useI18n } from "@/app/lib/i18n/client";
+import { BarChart, DonutChart } from "@/app/components/ui/charts";
 import type { AppUser, Center, Course, Student, Teacher } from "@/app/types";
 import {
   Building2,
@@ -15,22 +17,22 @@ import {
 } from "lucide-react";
 
 export default function DashboardClient({ user }: { user: AppUser | null }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [data, setData] = useState<{
     centers: Center[];
     courses: Course[];
     students: Student[];
     teachers: Teacher[];
     revenue: number;
+    collected: number;
+    outstanding: number;
+    revenueByMonth: { year: number; month: number; total: number }[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    if (!user) return;
 
     let cancelled = false;
     async function load() {
@@ -48,6 +50,10 @@ export default function DashboardClient({ user }: { user: AppUser | null }) {
             students: json.students as Student[],
             teachers: json.teachers as Teacher[],
             revenue: (json.revenue as number) ?? 0,
+            collected: (json.collected as number) ?? 0,
+            outstanding: (json.outstanding as number) ?? 0,
+            revenueByMonth:
+              (json.revenueByMonth as { year: number; month: number; total: number }[]) ?? [],
           });
         }
       } catch (err) {
@@ -63,7 +69,11 @@ export default function DashboardClient({ user }: { user: AppUser | null }) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, t]);
+
+  // The effect only clears `loading` after a fetch — when there is no user
+  // we show the "unable to identify" branch instead of the spinner.
+  const showLoading = loading && Boolean(user);
 
   const stats = data
     ? [
@@ -88,7 +98,7 @@ export default function DashboardClient({ user }: { user: AppUser | null }) {
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
-      {loading ? (
+      {showLoading ? (
         <p className="text-slate-500">{t("loading")}</p>
       ) : !user ? (
         <p className="text-red-600 text-sm">{t("unableToIdentifyUser")}</p>
@@ -106,7 +116,59 @@ export default function DashboardClient({ user }: { user: AppUser | null }) {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+            <Card className="p-6">
+              <h3 className="mb-4 text-lg font-semibold">{t("revenueOverview")}</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl bg-muted/50 p-4">
+                  <p className="text-sm text-muted-foreground">{t("revenue")}</p>
+                  <p className="mt-1 text-2xl font-bold">
+                    {formatCurrency(data?.revenue ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-muted/50 p-4">
+                  <p className="text-sm text-muted-foreground">{t("collected")}</p>
+                  <p className="mt-1 text-2xl font-bold">
+                    {formatCurrency(data?.collected ?? 0)}
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <h3 className="mb-4 text-lg font-semibold">{t("paymentBreakdown")}</h3>
+              <DonutChart
+                data={[
+                  {
+                    label: t("collected"),
+                    value: data?.collected ?? 0,
+                    color: "#0f766e",
+                  },
+                  {
+                    label: t("outstanding"),
+                    value: data?.outstanding ?? 0,
+                    color: "#d9a441",
+                  },
+                ]}
+                centerLabel={t("payments")}
+              />
+            </Card>
+          </div>
+
+          <Card className="p-6">
+            <h3 className="mb-4 text-lg font-semibold">{t("monthlyRevenue")}</h3>
+            <BarChart
+              data={(data?.revenueByMonth ?? []).map((m) => ({
+                label: new Date(m.year, m.month).toLocaleDateString(locale, {
+                  month: "short",
+                }),
+                value: m.total,
+              }))}
+              formatValue={(v) => formatCurrency(v)}
+            />
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="p-6">
               <h3 className="mb-4 text-lg font-semibold">{t("recentCenters")}</h3>
               <ul className="space-y-3">
                 {data?.centers.slice(0, 5).map((c) => (
@@ -114,15 +176,7 @@ export default function DashboardClient({ user }: { user: AppUser | null }) {
                     <span className="font-medium text-slate-800 dark:text-slate-100">
                       {c.name}
                     </span>
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                        c.status === "active"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {t(c.status)}
-                    </span>
+                    <StatusBadge status={c.status} label={t(c.status)} />
                   </li>
                 ))}
                 {data?.centers.length === 0 && (
@@ -131,7 +185,7 @@ export default function DashboardClient({ user }: { user: AppUser | null }) {
               </ul>
             </Card>
 
-            <Card>
+            <Card className="p-6">
               <h3 className="mb-4 text-lg font-semibold">{t("recentCourses")}</h3>
               <ul className="space-y-3">
                 {data?.courses.slice(0, 5).map((c) => (

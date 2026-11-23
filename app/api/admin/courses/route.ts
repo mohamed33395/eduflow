@@ -1,42 +1,27 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import { getSessionUser } from "@/app/lib/auth-cookies";
+import {
+  apiErrorResponse,
+  apiFetchServer,
+  findUserByEmail,
+  getSessionUser,
+} from "@/app/lib/api-server";
 import { slugify } from "@/app/lib/utils";
-import { FieldValue, type Timestamp } from "firebase-admin/firestore";
 import { toPhoneDigits } from "@/app/lib/phone";
-import { generatePassword, storeDevPassword } from "@/app/lib/auth-helpers";
+import { generatePassword } from "@/app/lib/auth-helpers";
+import { usernameFromEmail } from "@/app/lib/mappers";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const currentUser = await getSessionUser();
   if (!currentUser || currentUser.role !== "super_admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const adminDb = getAdminDb();
-  if (!adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
-  }
-
   try {
-    const snap = await adminDb.collection("courses").get();
-    const courses = snap.docs.map((d) => {
-      const data = d.data();
-      const createdAt =
-        data.createdAt && (data.createdAt as Timestamp).toDate
-          ? (data.createdAt as Timestamp).toDate().toISOString()
-          : (data.createdAt as string) || "";
-      return { ...data, id: d.id, createdAt };
-    });
+    const courses = await apiFetchServer<unknown>("/courses");
     return NextResponse.json(courses);
   } catch (err) {
     console.error("[api/admin/courses] list failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "List failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "List failed");
   }
 }
 
@@ -44,15 +29,6 @@ export async function POST(req: NextRequest) {
   const currentUser = await getSessionUser();
   if (!currentUser || currentUser.role !== "super_admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-  if (!adminAuth || !adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
   }
 
   const {
@@ -75,87 +51,59 @@ export async function POST(req: NextRequest) {
       : "";
 
   try {
-    let owner;
-    let isExisting = false;
-    let ownerPasswordForCreate = "";
-    try {
-      owner = await adminAuth.getUserByEmail(ownerEmail);
-      isExisting = true;
-    } catch {
-      ownerPasswordForCreate =
-        typeof ownerPassword === "string" && ownerPassword.length >= 6
-          ? ownerPassword
-          : generatePassword(12);
-      owner = await adminAuth.createUser({
-        email: ownerEmail,
-        password: ownerPasswordForCreate,
-        displayName: `${name} Owner`,
-      });
-    }
-
-    const existingUserDoc = await adminDb
-      .collection("users")
-      .doc(owner.uid)
-      .get();
-    const existingRole = existingUserDoc.exists
-      ? (existingUserDoc.data()?.role as string | undefined)
-      : undefined;
-
-    if (isExisting && existingRole === "super_admin") {
+    // resolve or provision the course owner account
+    let owner = await findUserByEmail(ownerEmail);
+    if (owner && owner.role === "SUPER_ADMIN") {
       return NextResponse.json(
         { error: "This email is already used by the super admin" },
         { status: 400 }
       );
     }
-
-    // Never overwrite an existing owner's password from the create form.
-    // New owners are created above with the provided or a generated password.
-    // Existing owners keep their current password and can use forgot-password.
-
-    const courseRef = adminDb.collection("courses").doc();
-    const courseId = courseRef.id;
-    const slug = slugify(name);
-
-    await courseRef.set({
-      id: courseId,
-      name,
-      type,
-      level,
-      gradeFrom,
-      gradeTo,
-      description: description || "",
-      content: content || "",
-      coverImage: typeof coverImage === "string" ? coverImage : "",
-      status: "active",
-      ownerId: owner.uid,
-      slug,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-
-    await adminDb
-      .collection("users")
-      .doc(owner.uid)
-      .set(
-        {
-          uid: owner.uid,
-          name: owner.displayName || `${name} Owner`,
+    if (!owner) {
+      owner = await apiFetchServer<Record<string, unknown>>("/users", {
+        method: "POST",
+        body: {
+          name: `${name} Owner`,
+          username: usernameFromEmail(ownerEmail),
           email: ownerEmail,
-          phone: ownerPhoneDigits,
-          role: "course_owner",
-          courseId,
-          createdAt: FieldValue.serverTimestamp(),
+          password:
+            typeof ownerPassword === "string" && ownerPassword.length >= 8
+              ? ownerPassword
+              : generatePassword(12),
+          role: "COURSE_OWNER",
+          phone: ownerPhoneDigits || undefined,
         },
-        { merge: true }
-      );
+      });
+    }
 
-    await storeDevPassword(adminDb, owner.uid, ownerPasswordForCreate);
+    const course = await apiFetchServer<{ id: string; slug: string }>(
+      "/courses",
+      {
+        method: "POST",
+        body: {
+          name,
+          slug: slugify(name),
+          type,
+          level: typeof level === "string" ? level.toUpperCase() : level,
+          gradeFrom,
+          gradeTo,
+          description: description || undefined,
+          content: content || undefined,
+          coverImage: typeof coverImage === "string" ? coverImage : undefined,
+          ownerId: owner.id,
+        },
+      }
+    );
 
-    return NextResponse.json({ id: courseId, slug });
+    // link the owner's user record to the new course
+    await apiFetchServer(`/users/${owner.id}`, {
+      method: "PATCH",
+      body: { courseId: course.id },
+    }).catch(() => null);
+
+    return NextResponse.json({ id: course.id, slug: course.slug });
   } catch (err) {
     console.error("[api/admin/courses] create failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Create failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Create failed");
   }
 }

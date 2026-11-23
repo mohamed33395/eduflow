@@ -1,5 +1,13 @@
 import { getSessionUser } from "@/app/lib/auth-cookies";
-import { getAdminDb } from "@/app/lib/firebase-admin";
+import { ApiError } from "@/app/lib/api";
+import { apiFetchServer } from "@/app/lib/api-server";
+import {
+  toAssignment,
+  toCourse,
+  toLesson,
+  toStudent,
+  unwrapList,
+} from "@/app/lib/mappers";
 import { getI18n } from "@/app/lib/i18n/server";
 import { StatsCard } from "@/app/components/ui/StatsCard";
 import {
@@ -12,121 +20,37 @@ import {
 } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Table } from "@/app/components/ui/table";
+import { DonutChart } from "@/app/components/ui/charts";
 import { BookOpen, FileText, Users, Layout } from "lucide-react";
 import type { Course, Lesson, Assignment, Student } from "@/app/types";
-import { Timestamp } from "firebase-admin/firestore";
 
-function toCourse(id: string, data: Record<string, unknown>): Course {
-  return {
-    id,
-    name: (data.name as string) ?? "",
-    slug: (data.slug as string) ?? "",
-    type: (data.type as string) ?? "",
-    level: (data.level as Course["level"]) ?? "primary",
-    gradeFrom: (data.gradeFrom as number) ?? 1,
-    gradeTo: (data.gradeTo as number) ?? 12,
-    description: (data.description as string) ?? "",
-    content: data.content as string | undefined,
-    coverImage: data.coverImage as string | undefined,
-    ownerId: (data.ownerId as string) ?? "",
-    centerId: data.centerId as string | undefined,
-    status: (data.status as Course["status"]) ?? "active",
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
-
-function toLesson(id: string, data: Record<string, unknown>): Lesson {
-  return {
-    id,
-    courseId: (data.courseId as string) ?? "",
-    title: (data.title as string) ?? "",
-    description: data.description as string | undefined,
-    videoUrl: data.videoUrl as string | undefined,
-    files: (data.files as Lesson["files"]) ?? [],
-    order: (data.order as number) ?? 0,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
-
-function toAssignment(id: string, data: Record<string, unknown>): Assignment {
-  return {
-    id,
-    courseId: (data.courseId as string) ?? "",
-    teacherId: (data.teacherId as string) ?? "",
-    title: (data.title as string) ?? "",
-    description: (data.description as string) ?? "",
-    deadline: (data.deadline as string) ?? "",
-    maxGrade: data.maxGrade as number | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
-
-function toStudent(id: string, data: Record<string, unknown>): Student {
-  return {
-    id,
-    name: (data.name as string) ?? "",
-    username: (data.username as string) ?? "",
-    email: data.email as string | undefined,
-    centerId: data.centerId as string | undefined,
-    classId: data.classId as string | undefined,
-    subjectIds: (data.subjectIds as string[]) ?? [],
-    courses: (data.courses as string[]) ?? [],
-    avatarUrl: data.avatarUrl as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
+type Row = Record<string, unknown>;
 
 export default async function CourseDashboardPage() {
   const { t } = await getI18n();
   const user = await getSessionUser();
   const courseId = user?.courseId ?? "";
 
-  const adminDb = getAdminDb();
-
   let course: Course | null = null;
   let lessons: Lesson[] = [];
   let assignments: Assignment[] = [];
   let students: Student[] = [];
 
-  if (adminDb && courseId) {
-    const [courseSnap, lessonsSnap, assignmentsSnap, studentsSnap] =
+  if (courseId) {
+    const [courseRow, lessonsData, assignmentsData, studentsData] =
       await Promise.all([
-        adminDb.collection("courses").doc(courseId).get(),
-        adminDb.collection("lessons").where("courseId", "==", courseId).get(),
-        adminDb
-          .collection("assignments")
-          .where("courseId", "==", courseId)
-          .get(),
-        adminDb
-          .collection("students")
-          .where("courses", "array-contains", courseId)
-          .get(),
+        apiFetchServer<Row>(`/courses/${courseId}`).catch((err) =>
+          err instanceof ApiError && err.status === 404 ? null : Promise.reject(err)
+        ),
+        apiFetchServer<unknown>(`/courses/${courseId}/lessons`).catch(() => []),
+        apiFetchServer<unknown>(`/courses/${courseId}/assignments`).catch(() => []),
+        apiFetchServer<unknown>(`/students?courseId=${courseId}&limit=100`).catch(() => []),
       ]);
 
-    course = courseSnap.exists
-      ? toCourse(courseSnap.id, courseSnap.data() as Record<string, unknown>)
-      : null;
-    lessons = lessonsSnap.docs.map((d) =>
-      toLesson(d.id, d.data() as Record<string, unknown>)
-    );
-    assignments = assignmentsSnap.docs.map((d) =>
-      toAssignment(d.id, d.data() as Record<string, unknown>)
-    );
-    students = studentsSnap.docs.map((d) =>
-      toStudent(d.id, d.data() as Record<string, unknown>)
-    );
+    course = courseRow ? toCourse(courseRow) : null;
+    lessons = unwrapList<Row>(lessonsData).map(toLesson);
+    assignments = unwrapList<Row>(assignmentsData).map(toAssignment);
+    students = unwrapList<Row>(studentsData).map(toStudent);
   }
 
   const stats = [
@@ -160,7 +84,23 @@ export default async function CourseDashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="lg:col-span-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("courseOverview")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DonutChart
+              data={[
+                { label: t("lessons"), value: lessons.length },
+                { label: t("assignments"), value: assignments.length },
+                { label: t("students"), value: students.length },
+              ]}
+              centerLabel={t("overview")}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader>
             <CardTitle>{t("courseContent")}</CardTitle>
             <CardDescription>{course?.description}</CardDescription>
@@ -179,7 +119,9 @@ export default async function CourseDashboardPage() {
             </Button>
           </CardFooter>
         </Card>
+      </div>
 
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>{t("enrolledStudents")}</CardTitle>

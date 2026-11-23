@@ -1,4 +1,5 @@
 import { getCourseBySlugPublic } from "@/app/services/courses-public";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -21,9 +22,12 @@ export default async function CoursePublicPage({
           {course.type} • {course.level} • Grades {course.gradeFrom} - {course.gradeTo}
         </p>
         {course.coverImage && (
-          <img
+          <Image
             src={course.coverImage}
             alt={course.name}
+            width={768}
+            height={192}
+            unoptimized
             className="mt-6 h-48 w-full rounded-lg object-cover"
           />
         )}

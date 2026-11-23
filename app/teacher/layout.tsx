@@ -24,6 +24,7 @@ export default async function TeacherLayout({
           href: "/teacher",
           label: t("dashboard"),
           icon: <LayoutDashboard size={18} />,
+          group: t("overview"),
         },
         {
           href: "/teacher/courses",

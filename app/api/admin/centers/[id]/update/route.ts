@@ -1,9 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import { getSessionUser } from "@/app/lib/auth-cookies";
+import {
+  apiErrorResponse,
+  apiFetchServer,
+  getSessionUser,
+} from "@/app/lib/api-server";
 import { toPhoneDigits } from "@/app/lib/phone";
-import { FieldValue } from "firebase-admin/firestore";
-import { storeDevPassword } from "@/app/lib/auth-helpers";
+
+type Row = Record<string, unknown>;
 
 export async function GET(
   req: NextRequest,
@@ -14,53 +17,38 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const adminDb = getAdminDb();
-  if (!adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
-  }
-
   try {
     const { id } = await params;
-    const centerDoc = await adminDb.collection("centers").doc(id).get();
-    if (!centerDoc.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    const centerData = centerDoc.data() as Record<string, unknown>;
-    const ownerId = (centerData.ownerId as string) || "";
+    const center = await apiFetchServer<Row>(`/centers/${id}`);
+    const ownerId = (center.ownerId as string) || "";
 
     let ownerEmail = "";
     let ownerPhone = "";
-    let ownerDoc = null;
     if (ownerId) {
-      ownerDoc = await adminDb.collection("users").doc(ownerId).get();
-      if (ownerDoc.exists) {
-        const d = ownerDoc.data() as Record<string, unknown>;
-        ownerEmail = (d.email as string) || "";
-        ownerPhone = (d.phone as string) || "";
+      try {
+        const owner = await apiFetchServer<Row>(`/users/${ownerId}`);
+        ownerEmail = (owner.email as string) || "";
+        ownerPhone = (owner.phone as string) || "";
+      } catch {
+        // owner lookup failed — return empty fields
       }
     }
 
     return NextResponse.json({
       id,
-      name: centerData.name,
-      email: centerData.email,
-      phone: centerData.phone,
-      address: centerData.address,
-      status: centerData.status,
+      name: center.name,
+      slug: center.slug,
+      email: center.email,
+      phone: center.phone,
+      address: center.address,
+      status: typeof center.status === "string" ? center.status.toLowerCase() : center.status,
       ownerId,
       ownerEmail,
       ownerPhone,
     });
   } catch (err) {
     console.error("[api/admin/centers/[id]/update] GET failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Load failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Load failed");
   }
 }
 
@@ -73,111 +61,80 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-  if (!adminAuth || !adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
-  }
-
   try {
     const { id } = await params;
-    const centerDoc = await adminDb.collection("centers").doc(id).get();
-    if (!centerDoc.exists) {
+    const center = await apiFetchServer<Row>(`/centers/${id}`).catch(() => null);
+    if (!center) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     const body = (await req.json()) as Record<string, unknown>;
-    const { name, email, phone, address, status, ownerEmail, ownerPhone, ownerPassword, changePassword } = body;
+    const { name, slug, email, phone, address, status, ownerEmail, ownerPhone, ownerPassword, changePassword } = body;
 
-  const centerPhoneDigits =
-    typeof phone === "string" && phone.trim()
-      ? toPhoneDigits(phone.trim())
-      : "";
-  const ownerPhoneDigits =
-    typeof ownerPhone === "string" && ownerPhone.trim()
-      ? toPhoneDigits(ownerPhone.trim())
-      : "";
+    const centerPhoneDigits =
+      typeof phone === "string" && phone.trim()
+        ? toPhoneDigits(phone.trim())
+        : "";
+    const ownerPhoneDigits =
+      typeof ownerPhone === "string" && ownerPhone.trim()
+        ? toPhoneDigits(ownerPhone.trim())
+        : "";
 
-    const centerData = centerDoc.data() as Record<string, unknown>;
-    const ownerId = (centerData.ownerId as string) || "";
-
+    const ownerId = (center.ownerId as string) || "";
     if (!ownerId) {
       return NextResponse.json({ error: "Owner not found" }, { status: 400 });
     }
 
-    const ownerDoc = await adminDb.collection("users").doc(ownerId).get();
-    if (!ownerDoc.exists) {
+    const owner = await apiFetchServer<Row>(`/users/${ownerId}`).catch(() => null);
+    if (!owner) {
       return NextResponse.json({ error: "Owner not found" }, { status: 400 });
     }
-
-    const ownerData = ownerDoc.data() as Record<string, unknown>;
-    if (ownerData.role === "super_admin") {
+    if (owner.role === "SUPER_ADMIN") {
       return NextResponse.json(
         { error: "Cannot change super admin credentials here" },
         { status: 400 }
       );
     }
 
-    const currentEmail = (ownerData.email as string) || "";
-
-    // update owner email
-    if (ownerEmail && typeof ownerEmail === "string" && ownerEmail !== currentEmail) {
-      try {
-        const existing = await adminAuth.getUserByEmail(ownerEmail);
-        if (existing.uid !== ownerId) {
-          return NextResponse.json(
-            { error: "This email is already used by another account" },
-            { status: 400 }
-          );
-        }
-      } catch {
-        // email not in use, safe to update
-      }
-
-      await adminAuth.updateUser(ownerId, { email: ownerEmail });
-      await adminDb
-        .collection("users")
-        .doc(ownerId)
-        .update({ email: ownerEmail });
+    const ownerUpdate: Record<string, unknown> = {};
+    if (typeof ownerEmail === "string" && ownerEmail && ownerEmail !== owner.email) {
+      ownerUpdate.email = ownerEmail;
     }
-
-    // update owner phone
-    if (ownerPhoneDigits) {
-      await adminDb.collection("users").doc(ownerId).update({ phone: ownerPhoneDigits });
-    }
-
-    // update owner password only when explicitly requested
+    if (ownerPhoneDigits) ownerUpdate.phone = ownerPhoneDigits;
     if (
-      ownerPassword &&
       typeof ownerPassword === "string" &&
-      ownerPassword.length >= 6 &&
+      ownerPassword.length >= 8 &&
       changePassword !== false
     ) {
-      await adminAuth.updateUser(ownerId, { password: ownerPassword });
-      await storeDevPassword(adminDb, ownerId, ownerPassword);
+      ownerUpdate.newPassword = ownerPassword;
+    }
+    if (Object.keys(ownerUpdate).length > 0) {
+      await apiFetchServer(`/users/${ownerId}`, {
+        method: "PATCH",
+        body: ownerUpdate,
+      });
     }
 
-    // update center data
-    const update: Record<string, unknown> = {};
-    if (name !== undefined) update.name = name;
-    if (email !== undefined) update.email = email;
-    if (centerPhoneDigits) update.phone = centerPhoneDigits;
-    if (address !== undefined) update.address = address;
-    if (status !== undefined) update.status = status;
-    if (Object.keys(update).length > 0) {
-      update.updatedAt = FieldValue.serverTimestamp();
-      await adminDb.collection("centers").doc(id).update(update);
+    const centerUpdate: Record<string, unknown> = {};
+    if (name !== undefined) centerUpdate.name = name;
+    if (typeof slug === "string" && slug.trim()) centerUpdate.slug = slug.trim();
+    if (email !== undefined) centerUpdate.email = email;
+    if (centerPhoneDigits) centerUpdate.phone = centerPhoneDigits;
+    if (address !== undefined) centerUpdate.address = address;
+    if (status !== undefined) {
+      centerUpdate.status =
+        typeof status === "string" ? status.toUpperCase() : status;
+    }
+    if (Object.keys(centerUpdate).length > 0) {
+      await apiFetchServer(`/centers/${id}`, {
+        method: "PATCH",
+        body: centerUpdate,
+      });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[api/admin/centers/[id]/update] PATCH failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Update failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Update failed");
   }
 }

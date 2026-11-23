@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ROLE_COOKIE, SESSION_COOKIE } from "@/app/lib/auth-cookies";
+import {
+  REFRESH_COOKIE,
+  ROLE_COOKIE,
+  SESSION_COOKIE,
+} from "@/app/lib/auth-cookies";
 
 const PUBLIC_PATHS = ["/login", "/forgot-password", "/api/auth", "/api/forgot-password"];
 
@@ -24,7 +28,8 @@ function getRoleFromClaims(token: string): string | null {
     const decoded = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf-8")
     ) as Record<string, unknown>;
-    return (decoded.role as string) ?? null;
+    const role = decoded.role;
+    return typeof role === "string" ? role.toLowerCase() : null;
   } catch {
     return null;
   }
@@ -45,7 +50,9 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
+  const sessionCookie =
+    request.cookies.get(SESSION_COOKIE)?.value ??
+    request.cookies.get(REFRESH_COOKIE)?.value;
 
   if (!sessionCookie) {
     const loginUrl = new URL("/login", request.url);

@@ -1,9 +1,12 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/app/lib/auth-cookies";
-import { getAdminDb } from "@/app/lib/firebase-admin";
+import { ApiError } from "@/app/lib/api";
+import { apiFetchServer } from "@/app/lib/api-server";
+import { toCenterSettings, toTeacher } from "@/app/lib/mappers";
 import { getI18n } from "@/app/lib/i18n/server";
-import { sanitizeSettings } from "@/app/lib/center-settings";
 import { Button } from "@/app/components/ui/button";
+import { AttendanceQrCard } from "@/app/components/AttendanceQrCard";
 import {
   Card,
   CardHeader,
@@ -18,8 +21,17 @@ import {
   Calendar,
   User,
 } from "lucide-react";
-import { Timestamp } from "firebase-admin/firestore";
-import type { Teacher, SubjectAssignment } from "@/app/types";
+
+type Row = Record<string, unknown>;
+
+async function fetchOr404(path: string): Promise<Row | null> {
+  try {
+    return await apiFetchServer<Row>(path);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
 
 type PageParams = Promise<{ id: string }>;
 
@@ -52,9 +64,8 @@ export default async function TeacherProfilePage({
   const { id } = await params;
   const { t } = await getI18n();
   const currentUser = await getSessionUser();
-  const adminDb = getAdminDb();
 
-  if (!currentUser || !adminDb) {
+  if (!currentUser) {
     return notFound();
   }
 
@@ -63,50 +74,31 @@ export default async function TeacherProfilePage({
     return notFound();
   }
 
-  const [teacherSnap, centerSnap] = await Promise.all([
-    adminDb.collection("teachers").doc(id).get(),
-    adminDb.collection("centers").doc(centerId).get(),
+  const [teacherRow, centerRow] = await Promise.all([
+    fetchOr404(`/teachers/${id}`),
+    fetchOr404(`/centers/${centerId}`),
   ]);
 
-  if (!teacherSnap.exists) {
+  if (!teacherRow) {
     return notFound();
   }
 
-  const data = teacherSnap.data() as Record<string, unknown>;
-  const teacherCenterId = (data.centerId as string) || "";
+  const teacher = toTeacher(teacherRow);
 
   if (
-    teacherCenterId !== centerId &&
+    teacher.centerId !== centerId &&
     currentUser.role !== "super_admin"
   ) {
     return notFound();
   }
 
-  const centerData = centerSnap.exists
-    ? (centerSnap.data() as Record<string, unknown>)
-    : null;
-  const centerName = (centerData?.name as string) || t("noData");
+  const centerName =
+    (typeof centerRow?.name === "string" ? centerRow.name : "") || t("noData");
 
-  const rawSettings = (centerData?.settings as unknown) ?? null;
-  const settings = sanitizeSettings(rawSettings);
-  const subjectMap = new Map(settings.subjects.map((s) => [s.id, s]));
-
-  const teacher: Teacher = {
-    id: teacherSnap.id,
-    name: (data.name as string) ?? "",
-    email: (data.email as string) ?? "",
-    assignedCourses: (data.assignedCourses as string[]) ?? [],
-    assignedClassIds: (data.assignedClassIds as string[]) ?? [],
-    assignedSubjectIds: (data.assignedSubjectIds as string[]) ?? [],
-    subjectAssignments:
-      (data.subjectAssignments as SubjectAssignment[]) ?? [],
-    centerId: data.centerId as string | undefined,
-    avatarUrl: data.avatarUrl as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
+  const settings = toCenterSettings(centerRow ?? {});
+  const subjectMap = new Map(
+    (settings?.subjects ?? []).map((s) => [s.id, s])
+  );
 
   const assignments = teacher.subjectAssignments ?? [];
 
@@ -126,9 +118,12 @@ export default async function TeacherProfilePage({
         <CardContent className="pt-6">
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
             {teacher.avatarUrl ? (
-              <img
+              <Image
                 src={teacher.avatarUrl}
                 alt={teacher.name}
+                width={96}
+                height={96}
+                unoptimized
                 className="h-24 w-24 rounded-full object-cover ring-4 ring-indigo-100 dark:ring-indigo-900"
               />
             ) : (
@@ -213,6 +208,8 @@ export default async function TeacherProfilePage({
             )}
           </CardContent>
         </Card>
+
+        <AttendanceQrCard userId={teacher.id} name={teacher.name} />
       </div>
     </div>
   );

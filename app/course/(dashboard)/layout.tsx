@@ -24,6 +24,7 @@ export default async function CourseLayout({
           href: "/course",
           label: t("dashboard"),
           icon: <LayoutDashboard size={18} />,
+          group: t("overview"),
         },
         {
           href: "/course/lessons",

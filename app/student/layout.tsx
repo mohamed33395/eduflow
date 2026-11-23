@@ -5,6 +5,7 @@ import {
   BookOpen,
   FileText,
   CheckCircle,
+  ClipboardCheck,
   GraduationCap,
 } from "lucide-react";
 
@@ -24,6 +25,7 @@ export default async function StudentLayout({
           href: "/student",
           label: t("dashboard"),
           icon: <LayoutDashboard size={18} />,
+          group: t("overview"),
         },
         {
           href: "/student/courses",
@@ -34,6 +36,11 @@ export default async function StudentLayout({
           href: "/student/assignments",
           label: t("assignments"),
           icon: <FileText size={18} />,
+        },
+        {
+          href: "/student/tasks",
+          label: t("myTasks"),
+          icon: <ClipboardCheck size={18} />,
         },
         {
           href: "/student/grades",

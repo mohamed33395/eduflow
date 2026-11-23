@@ -68,7 +68,7 @@ export default function EditCoursePage({
         setError(err instanceof Error ? err.message : t("failedToLoadCourse"));
       })
       .finally(() => setFetching(false));
-  }, [id]);
+  }, [id, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

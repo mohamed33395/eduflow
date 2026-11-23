@@ -1,30 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { API_BASE } from "@/app/lib/api-server";
+import { usernameFromEmail } from "@/app/lib/mappers";
 
 export async function POST(req: NextRequest) {
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-
-  if (!adminAuth || !adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
-  }
-
-  const existing = await adminDb.collection("users").limit(1).get();
-  if (!existing.empty) {
-    return NextResponse.json(
-      { error: "Setup is only available when no users exist" },
-      { status: 403 }
-    );
-  }
-
-  const { email, password, name } = (await req.json()) as {
+  const { email, password, name, username } = (await req.json()) as {
     email?: string;
     password?: string;
     name?: string;
+    username?: string;
   };
 
   if (!email || !password) {
@@ -35,26 +18,40 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const user = await adminAuth.createUser({
-      email,
-      password,
-      displayName: name || email,
+    const res = await fetch(`${API_BASE}/api/auth/setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || email,
+        username: username || usernameFromEmail(email),
+        email,
+        password,
+      }),
+      cache: "no-store",
     });
 
-    await adminDb
-      .collection("users")
-      .doc(user.uid)
-      .set({
-        uid: user.uid,
-        name: name || email,
-        email,
-        role: "super_admin",
-        createdAt: FieldValue.serverTimestamp(),
-      });
+    const data = (await res.json().catch(() => null)) as {
+      id?: string;
+      message?: string | string[];
+      error?: string;
+    } | null;
+
+    if (!res.ok) {
+      const message =
+        data?.error ??
+        (Array.isArray(data?.message)
+          ? data.message.join("; ")
+          : data?.message) ??
+        "Setup failed";
+      return NextResponse.json(
+        { error: message },
+        { status: res.status === 409 ? 403 : res.status }
+      );
+    }
 
     return NextResponse.json({
       ok: true,
-      uid: user.uid,
+      uid: data?.id,
       email,
       role: "super_admin",
     });

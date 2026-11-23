@@ -1,9 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionUser } from "@/app/lib/auth-cookies";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { removeUndefined } from "@/app/lib/center-settings";
-import type { AppUser, EducationLevel, SubjectAssignment, Teacher } from "@/app/types";
+import { apiErrorResponse, apiFetchServer } from "@/app/lib/api-server";
+import {
+  toBackendSubjectAssignment,
+  toTeacher,
+  unwrapList,
+  usernameFromEmail,
+} from "@/app/lib/mappers";
+import type { EducationLevel, SubjectAssignment, Teacher } from "@/app/types";
 
 const ALLOWED_LEVELS: EducationLevel[] = [
   "kindergarten",
@@ -12,23 +16,7 @@ const ALLOWED_LEVELS: EducationLevel[] = [
   "high",
 ];
 
-function toTeacher(id: string, data: Record<string, unknown>): Teacher {
-  return {
-    id,
-    name: (data.name as string) ?? "",
-    email: (data.email as string) ?? "",
-    assignedCourses: (data.assignedCourses as string[]) ?? [],
-    assignedClassIds: (data.assignedClassIds as string[]) ?? [],
-    assignedSubjectIds: (data.assignedSubjectIds as string[]) ?? [],
-    subjectAssignments: (data.subjectAssignments as SubjectAssignment[]) ?? [],
-    centerId: data.centerId as string | undefined,
-    avatarUrl: data.avatarUrl as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
+type Row = Record<string, unknown>;
 
 export async function GET() {
   const currentUser = await getSessionUser();
@@ -44,29 +32,20 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const adminDb = getAdminDb();
-  if (!adminDb) {
-    return NextResponse.json(
-      { error: "Admin not configured" },
-      { status: 500 }
-    );
-  }
-
   const centerId = currentUser.centerId;
   if (!centerId) {
     return NextResponse.json({ error: "Missing centerId" }, { status: 400 });
   }
 
-  const snap = await adminDb
-    .collection("teachers")
-    .where("centerId", "==", centerId)
-    .get();
-
-  const teachers = snap.docs.map((d) =>
-    toTeacher(d.id, d.data() as Record<string, unknown>)
-  );
-
-  return NextResponse.json(teachers);
+  try {
+    const data = await apiFetchServer<unknown>(
+      `/teachers?centerId=${centerId}`
+    );
+    return NextResponse.json(unwrapList<Row>(data).map(toTeacher));
+  } catch (err) {
+    console.error("[api/center/teachers] list failed:", err);
+    return apiErrorResponse(err, "List failed");
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -92,14 +71,12 @@ export async function POST(req: NextRequest) {
     !centerId &&
     typeof currentUser.courseId === "string"
   ) {
-    // course owners often belong to a center; try to look it up
+    // course owners often belong to a center; resolve via their course
     try {
-      const adminDb = getAdminDb();
-      const course = await adminDb
-        ?.collection("courses")
-        ?.doc(currentUser.courseId)
-        ?.get();
-      centerId = (course?.data()?.centerId as string) || "";
+      const course = await apiFetchServer<Row>(
+        `/courses/${currentUser.courseId}`
+      );
+      centerId = (course?.centerId as string) || "";
     } catch {
       // ignore lookup failure
     }
@@ -107,15 +84,6 @@ export async function POST(req: NextRequest) {
 
   if (!centerId) {
     return NextResponse.json({ error: "No center assigned" }, { status: 400 });
-  }
-
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-  if (!adminAuth || !adminDb) {
-    return NextResponse.json(
-      { error: "Admin not configured" },
-      { status: 500 }
-    );
   }
 
   const {
@@ -165,98 +133,47 @@ export async function POST(req: NextRequest) {
     : [];
 
   try {
-    let uid: string;
-    try {
-      const userRecord = await adminAuth.getUserByEmail(cleanEmail);
-      uid = userRecord.uid;
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code;
-      if (code === "auth/user-not-found") {
-        const newUser = await adminAuth.createUser({
-          email: cleanEmail,
-          password,
-          displayName: cleanName,
-        });
-        uid = newUser.uid;
-      } else {
-        throw err;
-      }
-    }
-
-    const userDoc = await adminDb.collection("users").doc(uid).get();
-    if (userDoc.exists) {
-      const existing = userDoc.data() as AppUser | undefined;
-      if (existing?.role && existing.role !== "teacher") {
-        return NextResponse.json(
-          { error: "Email already used by another role" },
-          { status: 400 }
-        );
-      }
-      if (
-        existing?.centerId &&
-        existing.centerId !== centerId
-      ) {
-        return NextResponse.json(
-          { error: "Email belongs to another center" },
-          { status: 400 }
-        );
-      }
-    }
-
-    await adminAuth.updateUser(uid, { password, displayName: cleanName });
-
-    const userData = removeUndefined({
-      uid,
-      name: cleanName,
-      email: cleanEmail,
-      role: "teacher",
-      centerId,
-      avatarUrl: cleanAvatarUrl,
-      createdAt: new Date().toISOString(),
+    const created = await apiFetchServer<Row>("/teachers", {
+      method: "POST",
+      body: {
+        name: cleanName,
+        username: usernameFromEmail(cleanEmail),
+        email: cleanEmail,
+        password,
+        centerId,
+        compensationType: "FIXED",
+        fixedAmount: 0,
+        courseIds: cleanAssignedCourses.length ? cleanAssignedCourses : undefined,
+        subjectAssignments: cleanSubjectAssignments.length
+          ? cleanSubjectAssignments.map(toBackendSubjectAssignment)
+          : undefined,
+      },
     });
+    const uid = created.id as string;
 
-    await adminDb
-      .collection("users")
-      .doc(uid)
-      .set(userData as AppUser, { merge: true });
+    if (cleanAvatarUrl) {
+      await apiFetchServer(`/users/${uid}`, {
+        method: "PATCH",
+        body: { avatarUrl: cleanAvatarUrl },
+      }).catch(() => null);
+    }
 
-    const now = new Date().toISOString();
-    const teacherData = removeUndefined({
+    const teacher: Teacher = {
       id: uid,
       name: cleanName,
       email: cleanEmail,
       assignedCourses: cleanAssignedCourses,
+      assignedClassIds: [],
       assignedSubjectIds: cleanAssignedSubjectIds,
       subjectAssignments: cleanSubjectAssignments,
       centerId,
       avatarUrl: cleanAvatarUrl,
-      createdAt: now,
-    });
+      createdAt: new Date().toISOString(),
+    };
 
-    await adminDb
-      .collection("teachers")
-      .doc(uid)
-      .set({
-        ...teacherData,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-
-    return NextResponse.json({ uid, teacher: teacherData });
+    return NextResponse.json({ uid, teacher });
   } catch (err: unknown) {
     console.error("[api/center/teachers] create failed:", err);
-    const code = (err as { code?: string }).code;
-    if (
-      code === "auth/email-already-exists" ||
-      code === "auth/invalid-email"
-    ) {
-      return NextResponse.json(
-        { error: "Email already in use" },
-        { status: 400 }
-      );
-    }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Create failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Create failed");
   }
 }

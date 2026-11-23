@@ -1,10 +1,18 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/app/lib/auth-cookies";
-import { getAdminDb } from "@/app/lib/firebase-admin";
+import { ApiError } from "@/app/lib/api";
+import { apiFetchServer } from "@/app/lib/api-server";
+import {
+  toCenterSettings,
+  toPayment,
+  toStudent,
+  unwrapList,
+} from "@/app/lib/mappers";
 import { getI18n } from "@/app/lib/i18n/server";
-import { sanitizeSettings } from "@/app/lib/center-settings";
 import { formatCurrency } from "@/app/lib/utils";
 import { Button } from "@/app/components/ui/button";
+import { AttendanceQrCard } from "@/app/components/AttendanceQrCard";
 import {
   Card,
   CardHeader,
@@ -24,14 +32,18 @@ import {
   GraduationCap,
   DollarSign,
 } from "lucide-react";
-import { Timestamp } from "firebase-admin/firestore";
-import type {
-  Student,
-  Teacher,
-  Class,
-  Payment,
-  SubjectAssignment,
-} from "@/app/types";
+import type { Payment } from "@/app/types";
+
+type Row = Record<string, unknown>;
+
+async function fetchOr404(path: string): Promise<Row | null> {
+  try {
+    return await apiFetchServer<Row>(path);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
 
 type PageParams = Promise<{ id: string }>;
 
@@ -64,9 +76,8 @@ export default async function StudentProfilePage({
   const { id } = await params;
   const { t } = await getI18n();
   const currentUser = await getSessionUser();
-  const adminDb = getAdminDb();
 
-  if (!currentUser || !adminDb) {
+  if (!currentUser) {
     return notFound();
   }
 
@@ -75,101 +86,49 @@ export default async function StudentProfilePage({
     return notFound();
   }
 
-  const studentSnap = await adminDb.collection("students").doc(id).get();
-  if (!studentSnap.exists) {
+  const studentRow = await fetchOr404(`/students/${id}`);
+  if (!studentRow) {
     return notFound();
   }
 
-  const data = studentSnap.data() as Record<string, unknown>;
-  const studentCenterId = (data.centerId as string) || "";
+  const student = toStudent(studentRow);
 
   if (
-    studentCenterId !== centerId &&
+    student.centerId !== centerId &&
     currentUser.role !== "super_admin"
   ) {
     return notFound();
   }
 
-  const classId = (data.classId as string) || undefined;
-  const teacherId = (data.teacherId as string) || undefined;
+  const [centerRow, classRow, teacherRow, paymentsData] = await Promise.all([
+    fetchOr404(`/centers/${centerId}`),
+    student.classId ? fetchOr404(`/classes/${student.classId}`) : null,
+    student.teacherId ? fetchOr404(`/teachers/${student.teacherId}`) : null,
+    apiFetchServer<unknown>(`/payments?studentId=${id}&limit=100`).catch(
+      () => []
+    ),
+  ]);
 
-  const [centerSnap, classSnap, teacherSnap, paymentsSnap] =
-    await Promise.all([
-      adminDb.collection("centers").doc(centerId).get(),
-      classId ? adminDb.collection("classes").doc(classId).get() : null,
-      teacherId ? adminDb.collection("teachers").doc(teacherId).get() : null,
-      adminDb
-        .collection("payments")
-        .where("studentId", "==", id)
-        .get()
-        .catch(() => null),
-    ]);
+  const centerName =
+    (typeof centerRow?.name === "string" ? centerRow.name : "") || t("noData");
 
-  const centerData = centerSnap.exists
-    ? (centerSnap.data() as Record<string, unknown>)
-    : null;
-  const centerName = (centerData?.name as string) || t("noData");
+  const settings = toCenterSettings(centerRow ?? {});
+  const subjectMap = new Map(
+    (settings?.subjects ?? []).map((s) => [s.id, s])
+  );
 
-  const rawSettings = (centerData?.settings as unknown) ?? null;
-  const settings = sanitizeSettings(rawSettings);
-  const subjectMap = new Map(settings.subjects.map((s) => [s.id, s]));
+  const className =
+    (typeof classRow?.name === "string" ? classRow.name : "") ||
+    student.classId ||
+    t("noData");
 
-  const student: Student = {
-    id: studentSnap.id,
-    name: (data.name as string) ?? "",
-    username: (data.username as string) ?? "",
-    email: data.email as string | undefined,
-    phone: data.phone as string | undefined,
-    parentName: data.parentName as string | undefined,
-    parentPhone: data.parentPhone as string | undefined,
-    centerId: data.centerId as string | undefined,
-    level: data.level as Student["level"],
-    grade: typeof data.grade === "number" ? data.grade : undefined,
-    classId: data.classId as string | undefined,
-    subjectIds: (data.subjectIds as string[]) ?? [],
-    subjectAssignments:
-      (data.subjectAssignments as SubjectAssignment[]) ?? [],
-    teacherId: data.teacherId as string | undefined,
-    gender: data.gender as Student["gender"],
-    courses: (data.courses as string[]) ?? [],
-    avatarUrl: data.avatarUrl as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
+  const teacherUser = (teacherRow?.user as Row | undefined) ?? {};
+  const teacherName =
+    (typeof teacherUser.name === "string" ? teacherUser.name : "") ||
+    student.teacherId ||
+    t("noData");
 
-  const classData = classSnap?.exists
-    ? (classSnap.data() as Record<string, unknown>)
-    : null;
-  const className = classData
-    ? ((classData.name as string) || student.classId)
-    : student.classId || t("noData");
-
-  const teacherData = teacherSnap?.exists
-    ? (teacherSnap.data() as Record<string, unknown>)
-    : null;
-  const teacherName = teacherData
-    ? ((teacherData.name as string) || student.teacherId)
-    : student.teacherId || t("noData");
-
-  const payments: Payment[] =
-    paymentsSnap?.docs.map((d) => {
-      const p = d.data() as Record<string, unknown>;
-      return {
-        id: d.id,
-        studentId: (p.studentId as string) ?? "",
-        courseId: (p.courseId as string) ?? "",
-        amount: typeof p.amount === "number" ? p.amount : 0,
-        paid: typeof p.paid === "number" ? p.paid : 0,
-        remaining: typeof p.remaining === "number" ? p.remaining : 0,
-        dueDate: p.dueDate as string | undefined,
-        createdAt:
-          p.createdAt instanceof Timestamp
-            ? p.createdAt.toDate().toISOString()
-            : (p.createdAt as string) ?? "",
-      };
-    }) ?? [];
+  const payments: Payment[] = unwrapList<Row>(paymentsData).map(toPayment);
 
   const stageLabel =
     student.level && student.grade
@@ -194,9 +153,12 @@ export default async function StudentProfilePage({
         <CardContent className="pt-6">
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
             {student.avatarUrl ? (
-              <img
+              <Image
                 src={student.avatarUrl}
                 alt={student.name}
+                width={96}
+                height={96}
+                unoptimized
                 className="h-24 w-24 rounded-full object-cover ring-4 ring-indigo-100 dark:ring-indigo-900"
               />
             ) : (
@@ -356,6 +318,8 @@ export default async function StudentProfilePage({
             )}
           </CardContent>
         </Card>
+
+        <AttendanceQrCard userId={student.id} name={student.name} />
       </div>
 
       <Card>

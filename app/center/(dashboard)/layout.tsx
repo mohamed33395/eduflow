@@ -5,6 +5,7 @@ import {
   Users,
   UserCheck,
   ClipboardList,
+  ClipboardCheck,
   CreditCard,
   FileText,
   Settings,
@@ -22,10 +23,16 @@ export default async function CenterLayout({
       allowedRole="center_owner"
       title={`${t("centers")} ${t("dashboard")}`}
       navItems={[
-        { href: "/center", label: t("dashboard"), icon: <LayoutDashboard size={18} /> },
+        {
+          href: "/center",
+          label: t("dashboard"),
+          icon: <LayoutDashboard size={18} />,
+          group: t("overview"),
+        },
         { href: "/center/students", label: t("students"), icon: <Users size={18} /> },
         { href: "/center/teachers", label: t("teachers"), icon: <UserCheck size={18} /> },
         { href: "/center/attendance", label: t("attendance"), icon: <ClipboardList size={18} /> },
+        { href: "/center/tasks", label: t("tasks"), icon: <ClipboardCheck size={18} /> },
         { href: "/center/payments", label: t("payments"), icon: <CreditCard size={18} /> },
         { href: "/center/reports", label: t("reports"), icon: <FileText size={18} /> },
         { href: "/center/settings", label: t("settings"), icon: <Settings size={18} /> },

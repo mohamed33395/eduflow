@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { useAuth } from "@/app/hooks/useAuth";
 import { getStudentById } from "@/app/services/students";
 import { getAssignments, createSubmission } from "@/app/services/assignments";
 import { getCourses } from "@/app/services/courses";
@@ -19,9 +19,10 @@ export default function StudentAssignmentsPage() {
   const [selectedFile, setSelectedFile] = useState<Record<string, File | null>>({});
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    const auth = getAuth();
-    const uid = auth.currentUser?.uid;
+    const uid = user?.uid;
     if (!uid) return;
     getStudentById(uid).then(async (student) => {
       if (!student) return;
@@ -37,15 +38,14 @@ export default function StudentAssignmentsPage() {
       }
       setAssignments(all);
     });
-  }, []);
+  }, [user?.uid]);
 
   const handleFile = (id: string, file: File | null) => {
     setSelectedFile((p) => ({ ...p, [id]: file }));
   };
 
   const submit = async (assignmentId: string) => {
-    const auth = getAuth();
-    const studentId = auth.currentUser?.uid;
+    const studentId = user?.uid;
     if (!studentId) return;
 
     const file = selectedFile[assignmentId];
@@ -53,7 +53,6 @@ export default function StudentAssignmentsPage() {
       await createSubmission({
         assignmentId,
         studentId,
-        status: "pending",
       });
     } else {
       setUploading((p) => ({ ...p, [assignmentId]: true }));
@@ -63,7 +62,6 @@ export default function StudentAssignmentsPage() {
         assignmentId,
         studentId,
         fileUrl: res.url,
-        status: "pending",
       });
     }
     alert(t("submittedSuccessfully"));

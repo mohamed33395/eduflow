@@ -3,6 +3,8 @@ import { getI18n } from "@/app/lib/i18n/server";
 import { getStudentDashboard } from "@/app/lib/dashboard-data";
 import { StatsCard } from "@/app/components/ui/StatsCard";
 import { Card } from "@/app/components/ui/card";
+import { DonutChart } from "@/app/components/ui/charts";
+import { AttendanceQrCard } from "@/app/components/AttendanceQrCard";
 import { BookOpen, FileText, GraduationCap } from "lucide-react";
 
 export default async function StudentDashboardPage() {
@@ -46,19 +48,39 @@ export default async function StudentDashboardPage() {
         ))}
       </div>
 
-      <Card>
-        <h3 className="mb-4 text-lg font-semibold">{t("myCourses")}</h3>
-        <ul className="space-y-3">
-          {myCourses.map((c) => (
-            <li key={c.id} className="text-slate-700">
-              {c.name} — <span className="text-slate-400">{c.level}</span>
-            </li>
-          ))}
-          {myCourses.length === 0 && (
-            <li className="text-sm text-slate-500">{t("notEnrolledInAnyCourses")}</li>
-          )}
-        </ul>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <AttendanceQrCard
+          userId={studentId}
+          name={user?.name ?? ""}
+        />
+        <Card className="p-6">
+          <h3 className="mb-4 text-lg font-semibold">{t("overview")}</h3>
+          <DonutChart
+            data={[
+              { label: t("myCourses"), value: myCourses.length },
+              { label: t("lessons"), value: totalLessons },
+              { label: t("assignments"), value: totalAssignments },
+            ]}
+            centerLabel={t("overview")}
+          />
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="mb-4 text-lg font-semibold">{t("myCourses")}</h3>
+          <ul className="space-y-3">
+            {myCourses.map((c) => (
+              <li key={c.id} className="text-slate-700 dark:text-slate-300">
+                {c.name} — <span className="text-slate-400">{t(c.level)}</span>
+              </li>
+            ))}
+            {myCourses.length === 0 && (
+              <li className="text-sm text-slate-500">
+                {t("notEnrolledInAnyCourses")}
+              </li>
+            )}
+          </ul>
+        </Card>
+      </div>
     </div>
   );
 }

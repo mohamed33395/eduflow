@@ -1,79 +1,49 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  serverTimestamp,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "@/app/lib/firebase";
+import { api, qs } from "@/app/lib/api";
+import { toPayment, unwrapList } from "@/app/lib/mappers";
 import type { Payment } from "@/app/types";
 
-const COL = "payments";
-
-function toPayment(id: string, data: Record<string, unknown>): Payment {
-  return {
-    id,
-    studentId: (data.studentId as string) ?? "",
-    courseId: (data.courseId as string) ?? "",
-    amount: (data.amount as number) ?? 0,
-    paid: (data.paid as number) ?? 0,
-    remaining: (data.remaining as number) ?? 0,
-    dueDate: data.dueDate as string | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
+type Row = Record<string, unknown>;
 
 export async function getPayments(studentId?: string): Promise<Payment[]> {
-  const q = studentId
-    ? query(collection(db, COL), where("studentId", "==", studentId))
-    : collection(db, COL);
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => toPayment(d.id, d.data() as Record<string, unknown>));
+  const data = await api.get<unknown>(
+    `/payments${qs({ studentId, limit: 100 })}`
+  );
+  return unwrapList<Row>(data).map(toPayment);
 }
 
 export async function createPayment(
-  data: Omit<Payment, "id" | "createdAt">
+  data: Omit<Payment, "id" | "createdAt" | "remaining">
 ): Promise<string> {
-  const ref = await addDoc(collection(db, COL), {
-    ...data,
-    createdAt: serverTimestamp(),
+  const created = await api.post<Row>("/payments", {
+    studentId: data.studentId,
+    courseId: data.courseId,
+    amount: data.amount,
+    paid: data.paid,
+    dueDate: data.dueDate,
   });
-  return ref.id;
+  return created.id as string;
 }
 
 export async function recordPayment(
   id: string,
   amount: number
 ): Promise<void> {
-  const snap = await getDocs(
-    query(collection(db, COL), where("__name__", "==", id))
-  );
-  if (snap.empty) return;
-  const current = snap.docs[0].data() as { paid: number; remaining: number; amount: number };
-  const newPaid = (current.paid ?? 0) + amount;
-  const newRemaining = (current.amount ?? 0) - newPaid;
-  await updateDoc(doc(db, COL, id), {
-    paid: newPaid,
-    remaining: Math.max(0, newRemaining),
-  });
+  await api.post(`/payments/${id}/installments`, { amount });
 }
 
 export async function deletePayment(id: string): Promise<void> {
-  await deleteDoc(doc(db, COL, id));
+  await api.delete(`/payments/${id}`);
 }
 
 export async function getTotalRevenue(): Promise<number> {
-  const snap = await getDocs(collection(db, COL));
-  return snap.docs.reduce((sum, d) => {
-    const data = d.data() as { paid?: number };
-    return sum + (data.paid ?? 0);
-  }, 0);
+  let total = 0;
+  for (let page = 1; page <= 100; page++) {
+    const data = await api.get<unknown>(
+      `/payments${qs({ page, limit: 100 })}`
+    );
+    const items = unwrapList<Row>(data);
+    total += items.reduce((sum, p) => sum + (toPayment(p).paid || 0), 0);
+    if (items.length < 100) break;
+  }
+  return total;
 }

@@ -1,4 +1,5 @@
 import { getCenterBySlugPublic } from "@/app/services/centers-public";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -18,9 +19,12 @@ export default async function CenterPublicPage({
       <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow-xl">
         <h1 className="text-3xl font-bold text-slate-900">{center.name}</h1>
         {center.logo && (
-          <img
+          <Image
             src={center.logo}
             alt={center.name}
+            width={192}
+            height={96}
+            unoptimized
             className="mt-6 h-24 w-auto object-contain"
           />
         )}

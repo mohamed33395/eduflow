@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
 export interface ButtonProps
@@ -16,21 +17,23 @@ export interface ButtonProps
   size?: "default" | "sm" | "lg" | "icon";
   asChild?: boolean;
   href?: string;
+  /** Show a spinner and block clicks while an async action runs. */
+  loading?: boolean;
 }
 
 const variantClasses: Record<NonNullable<ButtonProps["variant"]>, string> = {
   default:
-    "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500",
+    "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/80 focus:ring-ring",
   destructive:
-    "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
+    "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/80 focus:ring-destructive",
   outline:
-    "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800",
+    "border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-ring",
   secondary:
-    "bg-slate-100 text-slate-900 hover:bg-slate-200 focus:ring-slate-500 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700",
+    "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/70 focus:ring-ring",
   ghost:
-    "text-slate-700 hover:bg-slate-100 focus:ring-slate-500 dark:text-slate-200 dark:hover:bg-slate-800",
+    "text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-ring",
   link:
-    "text-indigo-600 underline-offset-4 hover:underline focus:ring-indigo-500",
+    "text-primary underline-offset-4 hover:underline focus:ring-ring",
 };
 
 const sizeClasses: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -48,6 +51,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       size = "default",
       asChild,
       href,
+      loading = false,
       ...props
     },
     ref
@@ -83,7 +87,17 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       }
     }
 
-    return <button ref={ref} className={classes} {...props} />;
+    return (
+      <button
+        ref={ref}
+        className={classes}
+        {...props}
+        disabled={props.disabled || loading}
+      >
+        {loading && <Loader2 className="me-2 h-4 w-4 animate-spin" aria-hidden />}
+        {props.children}
+      </button>
+    );
   }
 );
 Button.displayName = "Button";

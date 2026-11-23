@@ -1,31 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useLocalStorageValue } from "@/app/hooks/useLocalStorageValue";
 import { getStudents } from "@/app/services/students";
-import { getLessons } from "@/app/services/lessons";
 import { getSubmissions, getAssignments } from "@/app/services/assignments";
 import { Table } from "@/app/components/ui/table";
 import type { Student } from "@/app/types";
 
 export default function CourseProgressPage() {
   const [students, setStudents] = useState<Student[]>([]);
-  const [courseId, setCourseId] = useState("");
+  const courseId = useLocalStorageValue("courseId");
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [grades, setGrades] = useState<Record<string, number>>({});
 
-  useEffect(() => {
-    const id = localStorage.getItem("courseId") || "";
-    setCourseId(id);
-    loadProgress(id);
-  }, []);
+  const getStudentSubmissionsForCourse = useCallback(
+    async (studentId: string, assignmentIds: string[]) => {
+      const all = await Promise.all(
+        assignmentIds.map((aid) => getSubmissions(aid))
+      );
+      return all.flat().filter((s) => s.studentId === studentId);
+    },
+    []
+  );
 
-  const loadProgress = async (id: string) => {
-    if (!id) return;
-    const [enrolled, lessons, assignments] = await Promise.all([
-      getStudents(undefined, id),
-      getLessons(id),
-      getAssignments(id),
-    ]);
+  const loadProgress = useCallback(
+    async (id: string) => {
+      if (!id) return;
+      const [enrolled, assignments] = await Promise.all([
+        getStudents(undefined, id),
+        getAssignments(id),
+      ]);
     setStudents(enrolled);
 
     const progressMap: Record<string, number> = {};
@@ -44,14 +48,14 @@ export default function CourseProgressPage() {
 
     setProgress(progressMap);
     setGrades(gradeMap);
-  };
+    },
+    [getStudentSubmissionsForCourse]
+  );
 
-  const getStudentSubmissionsForCourse = async (studentId: string, assignmentIds: string[]) => {
-    const all = await Promise.all(
-      assignmentIds.map((aid) => getSubmissions(aid))
-    );
-    return all.flat().filter((s) => s.studentId === studentId);
-  };
+  useEffect(() => {
+    if (!courseId) return;
+    void (async () => loadProgress(courseId))();
+  }, [courseId, loadProgress]);
 
   return (
     <div className="space-y-6">

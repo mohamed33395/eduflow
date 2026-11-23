@@ -4,7 +4,15 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { Table } from "@/app/components/ui/table";
 import { Button } from "@/app/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/app/components/ui/dropdown-menu";
 import { useI18n } from "@/app/lib/i18n/client";
+import { Eye, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import type { Course } from "@/app/types";
 
@@ -14,6 +22,7 @@ export default function AdminCoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -39,7 +48,30 @@ export default function AdminCoursesPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, t]);
+
+  const handleDelete = async (row: Course) => {
+    if (!window.confirm(t("confirmDelete"))) return;
+    setDeletingId(row.id);
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/courses/${row.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Delete failed");
+      }
+      // backend removes the row entirely
+      setCourses((prev) => prev.filter((c) => c.id !== row.id));
+    } catch (err) {
+      console.error("[AdminCoursesPage] delete error:", err);
+      setError(t("failedToDeleteCourse"));
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -59,7 +91,18 @@ export default function AdminCoursesPage() {
       ) : (
         <Table
           columns={[
-            { key: "name", header: t("name") },
+            {
+              key: "name",
+              header: t("name"),
+              render: (row: Course) => (
+                <Link
+                  href={`/admin/courses/${row.id}/${encodeURIComponent(row.slug)}`}
+                  className="font-medium text-foreground hover:text-primary hover:underline"
+                >
+                  {row.name}
+                </Link>
+              ),
+            },
             { key: "type", header: t("type") },
             { key: "level", header: t("level") },
             {
@@ -85,11 +128,43 @@ export default function AdminCoursesPage() {
               key: "actions",
               header: t("actions"),
               render: (row: Course) => (
-                <Link href={`/admin/courses/${row.id}/edit`}>
-                  <Button variant="ghost" size="sm">
-                    {t("edit")}
-                  </Button>
-                </Link>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label={t("actions")}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href={`/admin/courses/${row.id}/${encodeURIComponent(row.slug)}`}
+                      >
+                        <Eye />
+                        {t("view")}
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/admin/courses/${row.id}/edit`}>
+                        <Pencil />
+                        {t("edit")}
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-red-600 focus:bg-red-50 focus:text-red-700 dark:text-red-400 dark:focus:bg-red-950/40"
+                      disabled={deletingId === row.id}
+                      onSelect={() => void handleDelete(row)}
+                    >
+                      <Trash2 />
+                      {deletingId === row.id ? t("deleting") : t("delete")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ),
             },
           ]}

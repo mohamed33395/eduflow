@@ -1,54 +1,58 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { useAuth } from "@/app/hooks/useAuth";
 import { getAttendance } from "@/app/services/attendance";
-import { Table } from "@/app/components/ui/table";
+import { getCourses } from "@/app/services/courses";
+import { AttendanceCalendar } from "@/app/components/AttendanceCalendar";
 import { useI18n } from "@/app/lib/i18n/client";
 import type { AttendanceRecord } from "@/app/types";
 
 export default function StudentAttendancePage() {
   const { t } = useI18n();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [courseNames, setCourseNames] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+
+  const { user } = useAuth();
 
   useEffect(() => {
-    const auth = getAuth();
-    const uid = auth.currentUser?.uid;
+    const uid = user?.uid;
     if (!uid) return;
-    getAttendance(uid).then((list) => {
-      setRecords(list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    });
-  }, []);
+    let cancelled = false;
+
+    (async () => {
+      const [list, courses] = await Promise.all([
+        getAttendance(uid),
+        getCourses().catch(() => []),
+      ]);
+      if (cancelled) return;
+      setRecords(
+        list.sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        )
+      );
+      setCourseNames(
+        Object.fromEntries(courses.map((c) => [c.id, c.name] as const))
+      );
+      setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
         {t("myAttendance")}
       </h1>
-      <Table
-        columns={[
-          { key: "date", header: t("date") },
-          {
-            key: "status",
-            header: t("status"),
-            render: (row: AttendanceRecord) => (
-              <span
-                className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                  row.status === "present"
-                    ? "bg-green-100 text-green-700"
-                    : row.status === "late"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {t(row.status)}
-              </span>
-            ),
-          },
-        ]}
-        rows={records}
-        keyExtractor={(row) => row.id}
-      />
+      {loading ? (
+        <div className="h-96 animate-pulse rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+      ) : (
+        <AttendanceCalendar records={records} courseNames={courseNames} />
+      )}
     </div>
   );
 }

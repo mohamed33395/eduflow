@@ -1,9 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import { getSessionUser } from "@/app/lib/auth-cookies";
+import {
+  apiErrorResponse,
+  apiFetchServer,
+  getSessionUser,
+} from "@/app/lib/api-server";
 import { toPhoneDigits } from "@/app/lib/phone";
-import { FieldValue } from "firebase-admin/firestore";
-import { storeDevPassword } from "@/app/lib/auth-helpers";
+
+type Row = Record<string, unknown>;
 
 export async function GET(
   req: NextRequest,
@@ -14,56 +17,42 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const adminDb = getAdminDb();
-  if (!adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
-  }
-
   try {
     const { id } = await params;
-    const courseDoc = await adminDb.collection("courses").doc(id).get();
-    if (!courseDoc.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    const courseData = courseDoc.data() as Record<string, unknown>;
-    const ownerId = (courseData.ownerId as string) || "";
+    const course = await apiFetchServer<Row>(`/courses/${id}`);
+    const ownerId = (course.ownerId as string) || "";
 
     let ownerEmail = "";
     let ownerPhone = "";
-    let ownerDoc = null;
     if (ownerId) {
-      ownerDoc = await adminDb.collection("users").doc(ownerId).get();
-      if (ownerDoc.exists) {
-        const d = ownerDoc.data() as Record<string, unknown>;
-        ownerEmail = (d.email as string) || "";
-        ownerPhone = (d.phone as string) || "";
+      try {
+        const owner = await apiFetchServer<Row>(`/users/${ownerId}`);
+        ownerEmail = (owner.email as string) || "";
+        ownerPhone = (owner.phone as string) || "";
+      } catch {
+        // owner lookup failed — return empty fields
       }
     }
 
     return NextResponse.json({
       id,
-      name: courseData.name,
-      type: courseData.type,
-      level: courseData.level,
-      gradeFrom: courseData.gradeFrom,
-      gradeTo: courseData.gradeTo,
-      description: courseData.description,
-      content: courseData.content,
-      status: courseData.status,
+      name: course.name,
+      type: course.type,
+      level:
+        typeof course.level === "string" ? course.level.toLowerCase() : course.level,
+      gradeFrom: course.gradeFrom,
+      gradeTo: course.gradeTo,
+      description: course.description,
+      content: course.content,
+      status:
+        typeof course.status === "string" ? course.status.toLowerCase() : course.status,
       ownerId,
       ownerEmail,
       ownerPhone,
     });
   } catch (err) {
     console.error("[api/admin/courses/[id]/update] GET failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Load failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Load failed");
   }
 }
 
@@ -76,19 +65,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-  if (!adminAuth || !adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
-  }
-
   try {
     const { id } = await params;
-    const courseDoc = await adminDb.collection("courses").doc(id).get();
-    if (!courseDoc.exists) {
+    const course = await apiFetchServer<Row>(`/courses/${id}`).catch(() => null);
+    if (!course) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -108,91 +88,71 @@ export async function PATCH(
       changePassword,
     } = body;
 
-  const ownerPhoneDigits =
-    typeof ownerPhone === "string" && ownerPhone.trim()
-      ? toPhoneDigits(ownerPhone.trim())
-      : "";
+    const ownerPhoneDigits =
+      typeof ownerPhone === "string" && ownerPhone.trim()
+        ? toPhoneDigits(ownerPhone.trim())
+        : "";
 
-    const courseData = courseDoc.data() as Record<string, unknown>;
-    const ownerId = (courseData.ownerId as string) || "";
-
+    const ownerId = (course.ownerId as string) || "";
     if (!ownerId) {
       return NextResponse.json({ error: "Owner not found" }, { status: 400 });
     }
 
-    const ownerDoc = await adminDb.collection("users").doc(ownerId).get();
-    if (!ownerDoc.exists) {
+    const owner = await apiFetchServer<Row>(`/users/${ownerId}`).catch(() => null);
+    if (!owner) {
       return NextResponse.json({ error: "Owner not found" }, { status: 400 });
     }
-
-    const ownerData = ownerDoc.data() as Record<string, unknown>;
-    if (ownerData.role === "super_admin") {
+    if (owner.role === "SUPER_ADMIN") {
       return NextResponse.json(
         { error: "Cannot change super admin credentials here" },
         { status: 400 }
       );
     }
 
-    const currentEmail = (ownerData.email as string) || "";
-
-    // update owner email
-    if (ownerEmail && typeof ownerEmail === "string" && ownerEmail !== currentEmail) {
-      try {
-        const existing = await adminAuth.getUserByEmail(ownerEmail);
-        if (existing.uid !== ownerId) {
-          return NextResponse.json(
-            { error: "This email is already used by another account" },
-            { status: 400 }
-          );
-        }
-      } catch {
-        // email not in use, safe to update
-      }
-
-      await adminAuth.updateUser(ownerId, { email: ownerEmail });
-      await adminDb
-        .collection("users")
-        .doc(ownerId)
-        .update({ email: ownerEmail });
+    const ownerUpdate: Record<string, unknown> = {};
+    if (typeof ownerEmail === "string" && ownerEmail && ownerEmail !== owner.email) {
+      ownerUpdate.email = ownerEmail;
     }
-
-    // update owner phone
-    if (ownerPhoneDigits) {
-      await adminDb.collection("users").doc(ownerId).update({ phone: ownerPhoneDigits });
-    }
-
-    // update owner password only when explicitly requested
+    if (ownerPhoneDigits) ownerUpdate.phone = ownerPhoneDigits;
     if (
-      ownerPassword &&
       typeof ownerPassword === "string" &&
-      ownerPassword.length >= 6 &&
+      ownerPassword.length >= 8 &&
       changePassword !== false
     ) {
-      await adminAuth.updateUser(ownerId, { password: ownerPassword });
-      await storeDevPassword(adminDb, ownerId, ownerPassword);
+      ownerUpdate.newPassword = ownerPassword;
+    }
+    if (Object.keys(ownerUpdate).length > 0) {
+      await apiFetchServer(`/users/${ownerId}`, {
+        method: "PATCH",
+        body: ownerUpdate,
+      });
     }
 
-    // update course data
-    const update: Record<string, unknown> = {};
-    if (name !== undefined) update.name = name;
-    if (type !== undefined) update.type = type;
-    if (level !== undefined) update.level = level;
-    if (gradeFrom !== undefined) update.gradeFrom = gradeFrom;
-    if (gradeTo !== undefined) update.gradeTo = gradeTo;
-    if (description !== undefined) update.description = description;
-    if (content !== undefined) update.content = content;
-    if (status !== undefined) update.status = status;
-    if (Object.keys(update).length > 0) {
-      update.updatedAt = FieldValue.serverTimestamp();
-      await adminDb.collection("courses").doc(id).update(update);
+    const courseUpdate: Record<string, unknown> = {};
+    if (name !== undefined) courseUpdate.name = name;
+    if (type !== undefined) courseUpdate.type = type;
+    if (level !== undefined) {
+      courseUpdate.level =
+        typeof level === "string" ? level.toUpperCase() : level;
+    }
+    if (gradeFrom !== undefined) courseUpdate.gradeFrom = gradeFrom;
+    if (gradeTo !== undefined) courseUpdate.gradeTo = gradeTo;
+    if (description !== undefined) courseUpdate.description = description;
+    if (content !== undefined) courseUpdate.content = content;
+    if (status !== undefined) {
+      courseUpdate.status =
+        typeof status === "string" ? status.toUpperCase() : status;
+    }
+    if (Object.keys(courseUpdate).length > 0) {
+      await apiFetchServer(`/courses/${id}`, {
+        method: "PATCH",
+        body: courseUpdate,
+      });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[api/admin/courses/[id]/update] PATCH failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Update failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Update failed");
   }
 }

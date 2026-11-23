@@ -26,7 +26,6 @@ export default function CenterReportsPage() {
     Promise.all([getStudents(centerId), getTeachers(centerId), getPayments()]).then(
       ([s, t, p]) => {
         const studentIds = new Set(s.map((x) => x.id));
-        const teacherIds = new Set(t.map((x) => x.id));
         setStudents(s);
         setTeachers(t);
         setPayments(p.filter((x) => studentIds.has(x.studentId)));

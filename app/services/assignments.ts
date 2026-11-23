@@ -1,108 +1,81 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  serverTimestamp,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "@/app/lib/firebase";
+import { api, ApiError, qs } from "@/app/lib/api";
+import { toAssignment, toSubmission, unwrapList } from "@/app/lib/mappers";
 import type { Assignment, Submission } from "@/app/types";
 
-const ASSIGN_COL = "assignments";
-const SUB_COL = "submissions";
-
-function toAssignment(id: string, data: Record<string, unknown>): Assignment {
-  return {
-    id,
-    courseId: (data.courseId as string) ?? "",
-    teacherId: (data.teacherId as string) ?? "",
-    title: (data.title as string) ?? "",
-    description: (data.description as string) ?? "",
-    deadline: (data.deadline as string) ?? "",
-    maxGrade: data.maxGrade as number | undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
-
-function toSubmission(id: string, data: Record<string, unknown>): Submission {
-  return {
-    id,
-    assignmentId: (data.assignmentId as string) ?? "",
-    studentId: (data.studentId as string) ?? "",
-    fileUrl: data.fileUrl as string | undefined,
-    text: data.text as string | undefined,
-    grade: data.grade as number | undefined,
-    feedback: data.feedback as string | undefined,
-    submittedAt:
-      data.submittedAt instanceof Timestamp
-        ? data.submittedAt.toDate().toISOString()
-        : (data.submittedAt as string) ?? "",
-    status: (data.status as Submission["status"]) ?? "pending",
-  };
-}
+type Row = Record<string, unknown>;
 
 export async function getAssignments(courseId: string): Promise<Assignment[]> {
-  const q = query(collection(db, ASSIGN_COL), where("courseId", "==", courseId));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => toAssignment(d.id, d.data() as Record<string, unknown>));
+  const data = await api.get<unknown>(`/courses/${courseId}/assignments`);
+  return unwrapList<Row>(data).map(toAssignment);
 }
 
-export async function getAssignmentById(id: string): Promise<Assignment | null> {
-  const snap = await getDoc(doc(db, ASSIGN_COL, id));
-  if (!snap.exists()) return null;
-  return toAssignment(snap.id, snap.data() as Record<string, unknown>);
+export async function getAssignmentById(
+  id: string
+): Promise<Assignment | null> {
+  try {
+    const data = await api.get<Row>(`/assignments/${id}`);
+    return toAssignment(data);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function createAssignment(
   data: Omit<Assignment, "id" | "createdAt">
 ): Promise<string> {
-  const ref = await addDoc(collection(db, ASSIGN_COL), {
-    ...data,
-    createdAt: serverTimestamp(),
+  const created = await api.post<Row>("/assignments", {
+    courseId: data.courseId,
+    title: data.title,
+    description: data.description,
+    deadline: data.deadline,
+    maxGrade: data.maxGrade,
   });
-  return ref.id;
+  return created.id as string;
 }
 
 export async function updateAssignment(
   id: string,
   data: Partial<Omit<Assignment, "id" | "createdAt">>
 ): Promise<void> {
-  await updateDoc(doc(db, ASSIGN_COL, id), data as Record<string, unknown>);
+  const payload: Record<string, unknown> = {};
+  if (data.title !== undefined) payload.title = data.title;
+  if (data.description !== undefined) payload.description = data.description;
+  if (data.deadline !== undefined) payload.deadline = data.deadline;
+  if (data.maxGrade !== undefined) payload.maxGrade = data.maxGrade;
+  await api.patch(`/assignments/${id}`, payload);
 }
 
 export async function deleteAssignment(id: string): Promise<void> {
-  await deleteDoc(doc(db, ASSIGN_COL, id));
+  await api.delete(`/assignments/${id}`);
 }
 
-export async function getSubmissions(assignmentId: string): Promise<Submission[]> {
-  const q = query(collection(db, SUB_COL), where("assignmentId", "==", assignmentId));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => toSubmission(d.id, d.data() as Record<string, unknown>));
+export async function getSubmissions(
+  assignmentId: string
+): Promise<Submission[]> {
+  const data = await api.get<unknown>(
+    `/assignments/${assignmentId}/submissions`
+  );
+  return unwrapList<Row>(data).map(toSubmission);
 }
 
-export async function getStudentSubmissions(studentId: string): Promise<Submission[]> {
-  const q = query(collection(db, SUB_COL), where("studentId", "==", studentId));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => toSubmission(d.id, d.data() as Record<string, unknown>));
+export async function getStudentSubmissions(
+  studentId: string
+): Promise<Submission[]> {
+  const data = await api.get<unknown>(
+    `/submissions${qs({ studentId })}`
+  );
+  return unwrapList<Row>(data).map(toSubmission);
 }
 
 export async function createSubmission(
-  data: Omit<Submission, "id" | "submittedAt">
+  data: Omit<Submission, "id" | "submittedAt" | "status">
 ): Promise<string> {
-  const ref = await addDoc(collection(db, SUB_COL), {
-    ...data,
-    submittedAt: serverTimestamp(),
-  });
-  return ref.id;
+  const created = await api.post<Row>(
+    `/assignments/${data.assignmentId}/submissions`,
+    { fileUrl: data.fileUrl, text: data.text }
+  );
+  return created.id as string;
 }
 
 export async function gradeSubmission(
@@ -110,5 +83,5 @@ export async function gradeSubmission(
   grade: number,
   feedback: string
 ): Promise<void> {
-  await updateDoc(doc(db, SUB_COL, id), { grade, feedback, status: "graded" });
+  await api.patch(`/submissions/${id}/grade`, { grade, feedback });
 }

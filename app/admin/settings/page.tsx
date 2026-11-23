@@ -44,7 +44,7 @@ export default function AdminSettingsPage() {
         setError(err instanceof Error ? err.message : t("failedToLoadSettings"));
       })
       .finally(() => setFetching(false));
-  }, []);
+  }, [t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

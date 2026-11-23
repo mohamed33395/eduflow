@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocalStorageValue } from "@/app/hooks/useLocalStorageValue";
 import { getLessons, createLesson } from "@/app/services/lessons";
 import { Table } from "@/app/components/ui/table";
 import { Button } from "@/app/components/ui/button";
@@ -12,7 +13,7 @@ import type { Lesson } from "@/app/types";
 export default function CourseLessonsPage() {
   const { t } = useI18n();
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [courseId, setCourseId] = useState("");
+  const courseId = useLocalStorageValue("courseId");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -24,10 +25,8 @@ export default function CourseLessonsPage() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    const id = localStorage.getItem("courseId") || "";
-    setCourseId(id);
-    if (id) getLessons(id).then(setLessons);
-  }, []);
+    if (courseId) getLessons(courseId).then(setLessons);
+  }, [courseId]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) setFile(e.target.files[0]);
@@ -38,7 +37,7 @@ export default function CourseLessonsPage() {
     if (!courseId) return;
     setUploading(true);
     let videoUrl = form.videoUrl;
-    let files: Lesson["files"] = [];
+    const files: Lesson["files"] = [];
 
     if (file) {
       const type = file.type.startsWith("video/")

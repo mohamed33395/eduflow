@@ -1,81 +1,153 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
-import { ROLE_COOKIE, SESSION_COOKIE } from "@/app/lib/auth-cookies";
-import type { AppUser } from "@/app/types";
+import {
+  API_BASE,
+  REFRESH_COOKIE,
+  clearSessionCookies,
+  setSessionCookies,
+} from "@/app/lib/api-server";
+import { toAppUser } from "@/app/lib/mappers";
 
-const FIVE_DAYS = 60 * 60 * 24 * 5 * 1000;
+const UPSTREAM_REFRESH_COOKIE = "eduflow_refresh";
 
-export async function POST(req: NextRequest) {
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-  if (!adminAuth) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
+function extractRefreshCookie(res: Response): string | undefined {
+  for (const sc of res.headers.getSetCookie?.() ?? []) {
+    const m = new RegExp(`^${UPSTREAM_REFRESH_COOKIE}=([^;]+)`).exec(sc);
+    if (m) return decodeURIComponent(m[1]);
   }
-  const { idToken } = await req.json();
+  return undefined;
+}
+
+/** POST /api/auth/session — log in with email/username + password. */
+export async function POST(req: NextRequest) {
   try {
-    let role: AppUser["role"] = "student";
-    try {
-      const decoded = await adminAuth.verifyIdToken(idToken);
-      if (adminDb) {
-        const userRef = adminDb.collection("users").doc(decoded.uid);
-        const userDoc = await userRef.get();
-
-        if (userDoc.exists) {
-          role = (userDoc.data()?.role as AppUser["role"]) || "student";
-        } else {
-          const existing = await adminDb.collection("users").limit(1).get();
-          role = existing.empty ? "super_admin" : "student";
-
-          const userRecord = await adminAuth.getUser(decoded.uid);
-          await userRef.set({
-            uid: decoded.uid,
-            name: userRecord.displayName || decoded.name || "",
-            email: userRecord.email || decoded.email || "",
-            role,
-            createdAt: FieldValue.serverTimestamp(),
-          });
-        }
-      }
-    } catch (err) {
-      console.error("[api/auth/session] role lookup/creation failed:", err);
+    const body = (await req.json().catch(() => ({}))) as {
+      identifier?: string;
+      email?: string; // legacy field name
+      password?: string;
+      token?: string; // multi-stage step token
+    };
+    const identifier = body.identifier ?? body.email;
+    if (!identifier || !body.password) {
+      return NextResponse.json(
+        { error: "Email and password are required" },
+        { status: 400 }
+      );
     }
 
-    const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-      expiresIn: FIVE_DAYS,
-    });
+    const isMultiStage = typeof body.token === "string" && body.token.length > 0;
 
-    const response = NextResponse.json({ ok: true, role });
-    response.cookies.set(SESSION_COOKIE, sessionCookie, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: FIVE_DAYS / 1000,
-      path: "/",
+    const res = await fetch(
+      `${API_BASE}/api/${isMultiStage ? "auths/login-step" : "auth/login"}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          isMultiStage
+            ? { identifier, password: body.password, token: body.token }
+            : { identifier, password: body.password }
+        ),
+        cache: "no-store",
+      }
+    );
+
+    const data = (await res.json().catch(() => null)) as {
+      accessToken?: string;
+      user?: Record<string, unknown>;
+      payload?: {
+        accessToken?: string;
+        user?: Record<string, unknown>;
+        token?: string;
+        login_way?: unknown;
+      };
+      message?: string | string[];
+      error?: string;
+    } | null;
+
+    if (isMultiStage) {
+      const payload = data?.payload;
+      if (res.ok && payload?.user && payload.accessToken) {
+        const user = toAppUser(payload.user);
+        const out = NextResponse.json({ ok: true, role: user.role, user });
+        setSessionCookies(out, {
+          accessToken: payload.accessToken,
+          refreshToken: extractRefreshCookie(res),
+          role: user.role,
+        });
+        return out;
+      }
+      if (res.ok && payload) {
+        // Another login step is required — hand the payload back to the client.
+        return NextResponse.json({ ok: true, payload });
+      }
+      const message =
+        data?.error ??
+        (Array.isArray(data?.message)
+          ? data.message.join("; ")
+          : data?.message) ??
+        "Invalid credentials";
+      return NextResponse.json(
+        { error: message },
+        { status: res.status || 401 }
+      );
+    }
+
+    if (!res.ok || !data?.accessToken || !data.user) {
+      const message =
+        data?.error ??
+        (Array.isArray(data?.message)
+          ? data.message.join("; ")
+          : data?.message) ??
+        "Invalid credentials";
+      return NextResponse.json({ error: message }, { status: res.status || 401 });
+    }
+
+    const user = toAppUser(data.user);
+    const out = NextResponse.json({ ok: true, role: user.role, user });
+    setSessionCookies(out, {
+      accessToken: data.accessToken,
+      refreshToken: extractRefreshCookie(res),
+      role: user.role,
     });
-    response.cookies.set(ROLE_COOKIE, role, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: FIVE_DAYS / 1000,
-      path: "/",
-    });
-    return response;
+    return out;
   } catch (err) {
-    console.error("[api/auth/session] createSessionCookie failed:", err);
+    console.error("[api/auth/session] login failed:", err);
+    const unreachable =
+      err instanceof TypeError &&
+      (err.message === "fetch failed" ||
+        [
+          "ECONNREFUSED",
+          "ENOTFOUND",
+          "ETIMEDOUT",
+          "ECONNRESET",
+          "UND_ERR_SOCKET",
+        ].includes((err as { cause?: { code?: string } }).cause?.code ?? ""));
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unauthorized" },
-      { status: 401 }
+      {
+        error: unreachable
+          ? "serviceUnavailable"
+          : err instanceof Error
+            ? err.message
+            : "Login failed",
+      },
+      { status: unreachable ? 503 : 500 }
     );
   }
 }
 
-export async function DELETE() {
-  const response = NextResponse.json({ ok: true });
-  response.cookies.delete(SESSION_COOKIE);
-  response.cookies.delete(ROLE_COOKIE);
-  return response;
+/** DELETE /api/auth/session — log out (revokes the refresh token upstream). */
+export async function DELETE(req: NextRequest) {
+  const rt = req.cookies.get(REFRESH_COOKIE)?.value;
+  try {
+    if (rt) {
+      await fetch(`${API_BASE}/api/auth/logout`, {
+        method: "POST",
+        headers: { cookie: `${UPSTREAM_REFRESH_COOKIE}=${rt}` },
+        cache: "no-store",
+      }).catch(() => null);
+    }
+  } finally {
+    const out = NextResponse.json({ ok: true });
+    clearSessionCookies(out);
+    return out;
+  }
 }

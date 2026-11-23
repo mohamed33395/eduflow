@@ -53,10 +53,7 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
   });
 
   useEffect(() => {
-    if (!centerId) {
-      setFetching(false);
-      return;
-    }
+    if (!centerId) return;
     fetch(endpoint, { credentials: "include" })
       .then(async (res) => {
         if (!res.ok) {
@@ -407,7 +404,9 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
     }
   };
 
-  if (fetching) {
+  // `fetching` is only cleared by the fetch below; when there is no
+  // centerId there is nothing to load, so render the form directly.
+  if (fetching && centerId) {
     return <p className="text-slate-500">{t("loading")}</p>;
   }
 

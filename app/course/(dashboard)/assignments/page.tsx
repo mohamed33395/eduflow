@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { useAuth } from "@/app/hooks/useAuth";
+import { useLocalStorageValue } from "@/app/hooks/useLocalStorageValue";
 import { getAssignments, createAssignment } from "@/app/services/assignments";
 import { Table } from "@/app/components/ui/table";
 import { Button } from "@/app/components/ui/button";
@@ -13,8 +14,7 @@ import type { Assignment } from "@/app/types";
 export default function CourseAssignmentsPage() {
   const { t } = useI18n();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [courseId, setCourseId] = useState("");
-  const [teacherId, setTeacherId] = useState("");
+  const courseId = useLocalStorageValue("courseId");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -23,14 +23,12 @@ export default function CourseAssignmentsPage() {
     maxGrade: 100,
   });
 
+  const { user } = useAuth();
+  const teacherId = user?.uid ?? "";
+
   useEffect(() => {
-    const auth = getAuth();
-    const cid = localStorage.getItem("courseId") || "";
-    setCourseId(cid);
-    const uid = auth.currentUser?.uid || "";
-    setTeacherId(uid);
-    if (cid) getAssignments(cid).then(setAssignments);
-  }, []);
+    if (courseId) getAssignments(courseId).then(setAssignments);
+  }, [courseId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

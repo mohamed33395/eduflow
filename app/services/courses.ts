@@ -1,87 +1,82 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  serverTimestamp,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "@/app/lib/firebase";
-import type { Course } from "@/app/types";
+import { api, ApiError, qs } from "@/app/lib/api";
+import { toCourse, unwrapList } from "@/app/lib/mappers";
 import { slugify } from "@/app/lib/utils";
+import type { Course } from "@/app/types";
 
-const COL = "courses";
-
-function toCourse(id: string, data: Record<string, unknown>): Course {
-  return {
-    id,
-    name: (data.name as string) ?? "",
-    slug: (data.slug as string) ?? "",
-    type: (data.type as string) ?? "",
-    level: (data.level as Course["level"]) ?? "primary",
-    gradeFrom: (data.gradeFrom as number) ?? 1,
-    gradeTo: (data.gradeTo as number) ?? 12,
-    description: (data.description as string) ?? "",
-    content: data.content as string | undefined,
-    coverImage: data.coverImage as string | undefined,
-    ownerId: (data.ownerId as string) ?? "",
-    centerId: data.centerId as string | undefined,
-    status: (data.status as Course["status"]) ?? "active",
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) ?? "",
-  };
-}
+type Row = Record<string, unknown>;
 
 export async function getCourses(centerId?: string): Promise<Course[]> {
-  const q = centerId
-    ? query(collection(db, COL), where("centerId", "==", centerId))
-    : collection(db, COL);
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => toCourse(d.id, d.data() as Record<string, unknown>));
+  const data = await api.get<unknown>(`/courses${qs({ centerId })}`);
+  return unwrapList<Row>(data).map(toCourse);
 }
 
 export async function getCourseBySlug(slug: string): Promise<Course | null> {
-  const q = query(collection(db, COL), where("slug", "==", slug));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return toCourse(d.id, d.data() as Record<string, unknown>);
+  // authenticated users get the full row via the scoped list
+  try {
+    const data = await api.get<unknown>("/courses");
+    const found = unwrapList<Row>(data).find((c) => c.slug === slug);
+    if (found) return toCourse(found);
+  } catch {
+    // fall through to the public endpoint (anonymous visitors)
+  }
+  try {
+    const data = await api.get<Row>(`/courses/slug/${slug}`);
+    return toCourse(data);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function getCourseById(id: string): Promise<Course | null> {
   if (!id || id === "???") return null;
-  const snap = await getDoc(doc(db, COL, id));
-  if (!snap.exists()) return null;
-  return toCourse(snap.id, snap.data() as Record<string, unknown>);
+  try {
+    const data = await api.get<Row>(`/courses/${id}`);
+    return toCourse(data);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function createCourse(
   data: Omit<Course, "id" | "slug" | "createdAt">
 ): Promise<string> {
-  const slug = slugify(data.name);
-  const ref = await addDoc(collection(db, COL), {
-    ...data,
-    slug,
-    createdAt: serverTimestamp(),
+  const created = await api.post<Row>("/courses", {
+    name: data.name,
+    slug: slugify(data.name),
+    type: data.type,
+    level: data.level?.toUpperCase(),
+    gradeFrom: data.gradeFrom,
+    gradeTo: data.gradeTo,
+    description: data.description,
+    content: data.content,
+    coverImage: data.coverImage,
+    centerId: data.centerId,
+    ownerId: data.ownerId,
   });
-  return ref.id;
+  return created.id as string;
 }
 
 export async function updateCourse(
   id: string,
   data: Partial<Omit<Course, "id" | "createdAt">>
 ): Promise<void> {
-  if (data.name) data.slug = slugify(data.name);
-  await updateDoc(doc(db, COL, id), data as Record<string, unknown>);
+  const payload: Record<string, unknown> = {};
+  if (data.name !== undefined) payload.name = data.name;
+  if (data.name !== undefined) payload.slug = slugify(data.name);
+  if (data.type !== undefined) payload.type = data.type;
+  if (data.level !== undefined) payload.level = data.level?.toUpperCase();
+  if (data.gradeFrom !== undefined) payload.gradeFrom = data.gradeFrom;
+  if (data.gradeTo !== undefined) payload.gradeTo = data.gradeTo;
+  if (data.description !== undefined) payload.description = data.description;
+  if (data.content !== undefined) payload.content = data.content;
+  if (data.coverImage !== undefined) payload.coverImage = data.coverImage;
+  if (data.centerId !== undefined) payload.centerId = data.centerId;
+  if (data.status !== undefined) payload.status = data.status.toUpperCase();
+  await api.patch(`/courses/${id}`, payload);
 }
 
 export async function deleteCourse(id: string): Promise<void> {
-  await deleteDoc(doc(db, COL, id));
+  await api.delete(`/courses/${id}`);
 }

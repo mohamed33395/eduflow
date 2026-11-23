@@ -62,6 +62,20 @@ export interface CenterSettings {
   years?: CenterYearPackage[];
 }
 
+export type BillingStatus = "PENDING" | "PAID" | "WAIVED";
+
+export interface CenterBilling {
+  id: string;
+  centerId: string;
+  year: number;
+  month: number;
+  amount: number;
+  status: BillingStatus;
+  paidAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
 export interface Center {
   id: string;
   name: string;
@@ -72,8 +86,11 @@ export interface Center {
   address?: string;
   status: CenterStatus;
   ownerId: string;
+  /** Monthly platform fee owed by the center (super admin only). */
+  monthlyFee?: number;
   settings?: CenterSettings;
   createdAt: string;
+  _count?: { studentProfiles: number; teacherProfiles: number; courses: number };
 }
 
 export type EducationLevel =
@@ -153,6 +170,10 @@ export interface Teacher {
   subjectAssignments?: SubjectAssignment[];
   centerId?: string;
   avatarUrl?: string;
+  /** monthly salary model */
+  compensationType?: "fixed" | "percentage";
+  fixedAmount?: number;
+  commissionPercent?: number;
   createdAt: string;
 }
 
@@ -213,6 +234,30 @@ export interface Payment {
   remaining: number;
   dueDate?: string;
   createdAt: string;
+  /** denormalized for display/filtering */
+  studentName?: string;
+  courseName?: string;
+  studentLevel?: EducationLevel;
+  studentGrade?: number;
+}
+
+export type PayoutStatus = "pending" | "approved" | "paid";
+
+export interface TeacherPayout {
+  id: string;
+  teacherId: string;
+  teacherName?: string;
+  periodStart: string;
+  periodEnd: string;
+  compensationType: "fixed" | "percentage";
+  fixedAmount?: number;
+  commissionPercent?: number;
+  collectedRevenue: number;
+  dueAmount: number;
+  status: PayoutStatus;
+  notes?: string;
+  paidAt?: string;
+  createdAt: string;
 }
 
 export interface DashboardStats {
@@ -221,4 +266,106 @@ export interface DashboardStats {
   totalStudents: number;
   totalTeachers: number;
   totalRevenue: number;
+}
+
+// ── Tasks (exams) ──────────────────────────────────────────────────
+
+export type TaskStudentStatus = "pending" | "submitted" | "rejected" | "graded";
+
+export interface TaskStats {
+  notified: number;
+  submitted: number;
+  graded: number;
+  rejected: number;
+  pending: number;
+}
+
+export interface CenterTask {
+  id: string;
+  title: string;
+  centerId: string;
+  subjectId: string;
+  subjectName: string;
+  teacherId: string;
+  teacherName: string;
+  lessonId?: string;
+  lessonTitle?: string;
+  examFileUrl: string;
+  createdAt: string;
+  stats: TaskStats;
+}
+
+export interface TaskStudentRow {
+  studentId: string;
+  name: string;
+  parentPhone?: string;
+  status: TaskStudentStatus;
+  submissionId?: string;
+  fileUrl?: string;
+  grade?: number;
+  feedback?: string;
+  attempts: number;
+  submittedAt?: string;
+  resultSentAt?: string;
+}
+
+export interface TaskDetail extends CenterTask {
+  students: TaskStudentRow[];
+}
+
+export interface TaskFormData {
+  teachers: { id: string; name: string }[];
+  lessons: { id: string; title: string }[];
+  studentCount: number;
+}
+
+export interface MyTaskItem {
+  recipientId: string;
+  task: {
+    id: string;
+    title: string;
+    examFileUrl: string;
+    subject?: { id: string; name: string };
+    lesson?: { id: string; title: string };
+    teacher?: { user?: { name: string } };
+    createdAt: string;
+  };
+  mySubmission: {
+    id: string;
+    fileUrl: string;
+    status: TaskStudentStatus;
+    grade?: number;
+    feedback?: string;
+    attempts: number;
+    submittedAt: string;
+    resultSentAt?: string;
+  } | null;
+  status: TaskStudentStatus;
+}
+
+export interface ReviewSubmission {
+  id: string;
+  taskId: string;
+  fileUrl: string;
+  status: TaskStudentStatus;
+  grade?: number;
+  feedback?: string;
+  attempts: number;
+  submittedAt: string;
+  resultSentAt?: string;
+  studentId: string;
+  studentName: string;
+  parentPhone?: string;
+  taskTitle: string;
+  subjectName: string;
+}
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  data?: Record<string, unknown>;
+  readAt?: string;
+  createdAt: string;
 }

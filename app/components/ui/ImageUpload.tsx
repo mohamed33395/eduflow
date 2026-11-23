@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import NextImage from "next/image";
 import { useI18n } from "@/app/lib/i18n/client";
 import { UploadCloud, X, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/app/lib/utils";
@@ -47,12 +48,17 @@ export function ImageUpload({
     };
   }, []);
 
-  useEffect(() => {
-    if (value && value !== preview) {
+  // Sync the preview when the controlled `value` prop changes — done at
+  // render time (React docs: "adjusting state when a prop changes"), so no
+  // effect is needed.
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
+    if (value) {
       setPreview(value);
       setDone(true);
     }
-  }, [value]);
+  }
 
   const processFile = useCallback(
     async (file: File) => {
@@ -171,9 +177,12 @@ export function ImageUpload({
 
         {hasPreview ? (
           <>
-            <img
+            <NextImage
               src={preview}
               alt={t("image")}
+              width={400}
+              height={compact ? 120 : 180}
+              unoptimized
               className={cn(
                 "w-full object-cover transition-opacity duration-200",
                 compact ? "h-[120px]" : "h-[180px]",

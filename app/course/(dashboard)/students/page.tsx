@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocalStorageValue } from "@/app/hooks/useLocalStorageValue";
 import { getStudents } from "@/app/services/students";
 import { Table } from "@/app/components/ui/table";
 import { useI18n } from "@/app/lib/i18n/client";
@@ -9,15 +10,13 @@ import type { Student } from "@/app/types";
 export default function CourseStudentsPage() {
   const { t } = useI18n();
   const [students, setStudents] = useState<Student[]>([]);
-  const [courseId, setCourseId] = useState("");
+  const courseId = useLocalStorageValue("courseId");
 
   useEffect(() => {
-    const id = localStorage.getItem("courseId") || "";
-    setCourseId(id);
-    if (id) {
-      getStudents(undefined, id).then(setStudents);
+    if (courseId) {
+      getStudents(undefined, courseId).then(setStudents);
     }
-  }, []);
+  }, [courseId]);
 
   return (
     <div className="space-y-6">

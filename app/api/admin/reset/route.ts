@@ -1,63 +1,32 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/app/lib/firebase-admin";
-import { storeDevPassword } from "@/app/lib/auth-helpers";
-import type { Firestore } from "firebase-admin/firestore";
-import type { Auth } from "firebase-admin/auth";
+import {
+  apiErrorResponse,
+  apiFetchServer,
+  fetchAllPages,
+  getSessionUser,
+} from "@/app/lib/api-server";
+import { unwrapList } from "@/app/lib/mappers";
+
+type Row = Record<string, unknown>;
 
 function getResetPassword(searchParams: URLSearchParams): string {
-  return searchParams.get("password")?.trim() || "eduflow";
+  const pwd = searchParams.get("password")?.trim();
+  return pwd && pwd.length >= 8 ? pwd : "eduflow123";
 }
 
-async function getUserDevPassword(
-  adminDb: Firestore,
-  adminAuth: Auth,
-  uid: string,
-  defaultPassword: string,
-  force: boolean,
-  sync: boolean
-): Promise<string> {
-  const userDoc = await adminDb.collection("users").doc(uid).get();
-  const data = userDoc.exists
-    ? (userDoc.data() as Record<string, unknown>)
-    : null;
-  const devPassword = data?.devPassword as string | undefined;
-
-  if (force) {
-    await adminAuth.updateUser(uid, { password: defaultPassword });
-    await storeDevPassword(adminDb, uid, defaultPassword);
-    return defaultPassword;
-  }
-
-  if (sync && devPassword) {
-    await adminAuth.updateUser(uid, { password: devPassword });
-    return devPassword;
-  }
-
-  if (devPassword) {
-    return devPassword;
-  }
-
-  await adminAuth.updateUser(uid, { password: defaultPassword });
-  await storeDevPassword(adminDb, uid, defaultPassword);
-  return defaultPassword;
-}
-
+/**
+ * Dev credential tool: resets every owner/admin account to `?password=`.
+ * Now requires a signed-in super admin session (the backend owns passwords).
+ */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== "eduflow-reset") {
+  const currentUser = await getSessionUser();
+  if (!currentUser || currentUser.role !== "super_admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const adminAuth = getAdminAuth();
-  const adminDb = getAdminDb();
-  if (!adminAuth || !adminDb) {
-    return NextResponse.json(
-      { error: "Firebase Admin not configured" },
-      { status: 500 }
-    );
-  }
-
   try {
+    const password = getResetPassword(searchParams);
     const results: {
       name: string;
       type: "super_admin" | "center" | "course";
@@ -65,141 +34,43 @@ export async function GET(req: NextRequest) {
       password: string;
     }[] = [];
 
-    const defaultPassword = getResetPassword(searchParams);
-    const force = searchParams.get("force") === "1";
-    const sync = searchParams.get("sync") === "1";
+    const users = await fetchAllPages<Row>("/users");
+    const centers = unwrapList<Row>(await apiFetchServer<unknown>("/centers"));
+    const courses = unwrapList<Row>(await apiFetchServer<unknown>("/courses"));
 
-    // super admin
-    const superAdminSnap = await adminDb
-      .collection("users")
-      .where("role", "==", "super_admin")
-      .limit(1)
-      .get();
-
-    if (!superAdminSnap.empty) {
-      const superAdmin = superAdminSnap.docs[0];
-      const data = superAdmin.data() as Record<string, unknown>;
-      const email = (data.email as string) || "";
-      const name = (data.name as string) || "EduFlow Admin";
-      if (email) {
-        const password = await getUserDevPassword(
-          adminDb,
-          adminAuth,
-          superAdmin.id,
-          defaultPassword,
-          force,
-          sync
-        );
-        results.push({ name, type: "super_admin", email, password });
-      }
-    } else {
-      // create default super admin
-      const defaultAdminEmail = "admin@eduflow.com";
-      let owner;
-      try {
-        owner = await adminAuth.getUserByEmail(defaultAdminEmail);
-      } catch {
-        owner = await adminAuth.createUser({
-          email: defaultAdminEmail,
-          password: defaultPassword,
-          displayName: "EduFlow Admin",
-        });
-      }
-      const password = await getUserDevPassword(
-        adminDb,
-        adminAuth,
-        owner.uid,
-        defaultPassword,
-        force,
-        sync
-      );
-      await adminDb
-        .collection("users")
-        .doc(owner.uid)
-        .set(
-          {
-            uid: owner.uid,
-            name: "EduFlow Admin",
-            email: defaultAdminEmail,
-            role: "super_admin",
-            createdAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      results.push({
-        name: "EduFlow Admin",
-        type: "super_admin",
-        email: defaultAdminEmail,
-        password,
+    const reset = async (user: Row, type: "super_admin" | "center" | "course", label: string) => {
+      const id = user.id as string;
+      const email = (user.email as string) || "";
+      if (!id || !email) return;
+      await apiFetchServer(`/users/${id}`, {
+        method: "PATCH",
+        body: { newPassword: password },
       });
+      results.push({ name: label, type, email, password });
+    };
+
+    for (const u of users) {
+      if (u.role !== "SUPER_ADMIN") continue;
+      await reset(u, "super_admin", (u.name as string) || "EduFlow Admin");
     }
 
-    // centers
-    const centersSnap = await adminDb.collection("centers").get();
-    for (const centerDoc of centersSnap.docs) {
-      const centerData = centerDoc.data() as Record<string, unknown>;
-      const centerName = (centerData.name as string) || centerDoc.id;
-      const ownerId = (centerData.ownerId as string) || "";
-      if (!ownerId) continue;
-
-      const ownerDoc = await adminDb.collection("users").doc(ownerId).get();
-      if (!ownerDoc.exists) continue;
-      const ownerData = ownerDoc.data() as Record<string, unknown>;
-      const email = (ownerData.email as string) || "";
-      if (!email) continue;
-
-      const password = await getUserDevPassword(
-        adminDb,
-        adminAuth,
-        ownerId,
-        defaultPassword,
-        force,
-        sync
-      );
-      results.push({
-        name: centerName,
-        type: "center",
-        email,
-        password,
-      });
+    for (const center of centers) {
+      const owner = users.find((u) => u.id === center.ownerId);
+      if (owner) {
+        await reset(owner, "center", (center.name as string) || "Center");
+      }
     }
 
-    // courses
-    const coursesSnap = await adminDb.collection("courses").get();
-    for (const courseDoc of coursesSnap.docs) {
-      const courseData = courseDoc.data() as Record<string, unknown>;
-      const courseName = (courseData.name as string) || courseDoc.id;
-      const ownerId = (courseData.ownerId as string) || "";
-      if (!ownerId) continue;
-
-      const ownerDoc = await adminDb.collection("users").doc(ownerId).get();
-      if (!ownerDoc.exists) continue;
-      const ownerData = ownerDoc.data() as Record<string, unknown>;
-      const email = (ownerData.email as string) || "";
-      if (!email) continue;
-
-      const password = await getUserDevPassword(
-        adminDb,
-        adminAuth,
-        ownerId,
-        defaultPassword,
-        force,
-        sync
-      );
-      results.push({
-        name: courseName,
-        type: "course",
-        email,
-        password,
-      });
+    for (const course of courses) {
+      const owner = users.find((u) => u.id === course.ownerId);
+      if (owner) {
+        await reset(owner, "course", (course.name as string) || "Course");
+      }
     }
 
     return NextResponse.json({ credentials: results });
   } catch (err) {
     console.error("[reset] error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Reset failed" },
-      { status: 500 }
-    );
+    return apiErrorResponse(err, "Reset failed");
   }
 }

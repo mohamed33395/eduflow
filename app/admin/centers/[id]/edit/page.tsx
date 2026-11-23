@@ -55,7 +55,7 @@ export default function EditCenterPage({
         setError(err instanceof Error ? err.message : t("failedToLoadCenter"));
       })
       .finally(() => setFetching(false));
-  }, [id]);
+  }, [id, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
