@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BillingStatus, EducationLevel, Status } from '@prisma/client';
+import { LandingProfileDto } from '../../common/landing-profile.dto';
 
 export class CenterSubjectDto {
   @IsEnum(EducationLevel)
@@ -149,6 +150,12 @@ export class UpdateCenterDto {
   @Min(1)
   @Max(500)
   maxStudentsPerClass?: number;
+
+  /** Public landing-page content ("الملف التعريفي"). Send null to clear. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LandingProfileDto)
+  landing?: LandingProfileDto;
 }
 
 // ── Platform billing ──

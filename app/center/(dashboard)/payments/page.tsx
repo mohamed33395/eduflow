@@ -13,29 +13,47 @@ import {
   previewPayout,
   updatePayoutStatus,
 } from "@/app/services/payouts";
+import {
+  getPaymentMethods,
+  createPaymentMethod,
+  updatePaymentMethod,
+  deletePaymentMethod,
+  getPaymentProofs,
+  reviewPaymentProof,
+} from "@/app/services/paymentMethods";
 import { Table } from "@/app/components/ui/table";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { StatusBadge } from "@/app/components/ui/status-badge";
+import { StatsCard } from "@/app/components/ui/StatsCard";
+import { DonutChart, TrendChart } from "@/app/components/ui/charts";
 import { formatCurrency } from "@/app/lib/utils";
 import { useI18n } from "@/app/lib/i18n/client";
+import { Banknote, AlertCircle, Percent, Receipt } from "lucide-react";
 import type {
   Course,
   EducationLevel,
   Payment,
+  PaymentMethod,
+  PaymentMethodKind,
+  PaymentProof,
   Student,
   Subject,
   Teacher,
   TeacherPayout,
 } from "@/app/types";
 
-type Tab = "students" | "teachers";
+type Tab = "students" | "teachers" | "accounts";
+
+/** Card wrapper matching the dashboard's rounded/bordered style. */
+const cardCls =
+  "rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800";
 
 const selectCls =
   "rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800";
 
 export default function CenterPaymentsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const centerId = user?.centerId ?? "";
 
@@ -46,8 +64,19 @@ export default function CenterPaymentsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [payouts, setPayouts] = useState<TeacherPayout[]>([]);
+  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [proofs, setProofs] = useState<PaymentProof[]>([]);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  const [showMethodForm, setShowMethodForm] = useState(false);
+  const [methodForm, setMethodForm] = useState<{
+    kind: PaymentMethodKind;
+    label: string;
+    account: string;
+    details: string;
+  }>({ kind: "bank", label: "", account: "", details: "" });
+  const [proofFilter, setProofFilter] = useState<"pending" | "approved" | "rejected" | "">("pending");
 
   // filters
   const [yearFilter, setYearFilter] = useState(""); // "level|grade" or ""
@@ -87,6 +116,8 @@ export default function CenterPaymentsPage() {
     getSubjects({ centerId }).then(setSubjects).catch(() => null);
     getCourses(centerId).then(setCourses).catch(() => null);
     getPayouts().then(setPayouts).catch(() => null);
+    getPaymentMethods().then(setMethods).catch(() => null);
+    getPaymentProofs().then(setProofs).catch(() => null);
   }, [centerId]);
 
   useEffect(() => {
@@ -292,6 +323,112 @@ export default function CenterPaymentsPage() {
 
   const fmtDate = (iso?: string) => (iso ? iso.slice(0, 10) : "—");
 
+  // ── collection accounts + proof review actions ───────────────────
+  const handleAddMethod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await createPaymentMethod({
+        kind: methodForm.kind,
+        label: methodForm.label.trim(),
+        account: methodForm.account.trim(),
+        details: methodForm.details.trim() || undefined,
+      });
+      setShowMethodForm(false);
+      setMethodForm({ kind: "bank", label: "", account: "", details: "" });
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleMethod = (m: PaymentMethod) =>
+    updatePaymentMethod(m.id, { isActive: !m.isActive })
+      .then(loadData)
+      .catch(() => null);
+
+  const removeMethod = (m: PaymentMethod) => {
+    if (!confirm(`${t("delete")} ${m.label}?`)) return;
+    deletePaymentMethod(m.id).then(loadData).catch(() => null);
+  };
+
+  const reviewProof = async (p: PaymentProof, action: "approve" | "reject") => {
+    setBusy(true);
+    try {
+      await reviewPaymentProof(p.id, action);
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const visibleProofs = useMemo(
+    () => (proofFilter ? proofs.filter((p) => p.status === proofFilter) : proofs),
+    [proofs, proofFilter]
+  );
+
+  const kindLabel = (k?: string) =>
+    k === "wallet" ? t("methodWallet") : k === "cash" ? t("methodCash") : t("methodBank");
+
+  const accountLabel = (k?: string) =>
+    k === "wallet" ? t("walletNumber") : k === "cash" ? t("cashDetails") : t("bankAccountNumber");
+
+  // ── financial overview (center-wide, ignores the year filter) ────
+  const centerPayments = useMemo(() => {
+    const ids = new Set(students.map((s) => s.id));
+    return payments.filter((p) => ids.has(p.studentId));
+  }, [payments, students]);
+
+  const { totalPaid, totalRemaining, totalBilled } = useMemo(
+    () => ({
+      totalPaid: centerPayments.reduce((sum, p) => sum + p.paid, 0),
+      totalRemaining: centerPayments.reduce((sum, p) => sum + p.remaining, 0),
+      totalBilled: centerPayments.reduce((sum, p) => sum + p.amount, 0),
+    }),
+    [centerPayments]
+  );
+  const collectionRate =
+    totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
+  const outstandingCount = centerPayments.filter((p) => p.remaining > 0).length;
+
+  /** Last 6 calendar months → collected vs billed per month. */
+  const monthly = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-US", {
+      month: "short",
+    });
+    const buckets: {
+      key: string;
+      label: string;
+      paid: number;
+      billed: number;
+    }[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        key: `${d.getFullYear()}-${d.getMonth()}`,
+        label: fmt.format(d),
+        paid: 0,
+        billed: 0,
+      });
+    }
+    const index = new Map(buckets.map((b, i) => [b.key, i]));
+    for (const p of centerPayments) {
+      const d = new Date(p.createdAt);
+      if (Number.isNaN(d.getTime())) continue;
+      const i = index.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (i === undefined) continue;
+      buckets[i].paid += p.paid;
+      buckets[i].billed += p.amount;
+    }
+    return buckets;
+  }, [centerPayments, locale]);
+
   // ── chart data ──────────────────────────────────────────────────
   const yearChart = useMemo(() => {
     const map = new Map<
@@ -328,9 +465,82 @@ export default function CenterPaymentsPage() {
         {t("payments")}
       </h1>
 
+      {/* ── financial overview ── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatsCard
+          title={t("totalPaid")}
+          value={formatCurrency(totalPaid)}
+          icon={<Banknote size={22} />}
+          trend={`${centerPayments.length} ${t("paymentsCount")}`}
+          trendUp
+        />
+        <StatsCard
+          title={t("remaining")}
+          value={formatCurrency(totalRemaining)}
+          icon={<AlertCircle size={22} />}
+          trend={`${outstandingCount} ${t("paymentsCount")}`}
+          trendUp={outstandingCount === 0}
+        />
+        <StatsCard
+          title={t("billed")}
+          value={formatCurrency(totalBilled)}
+          icon={<Receipt size={22} />}
+        />
+        <StatsCard
+          title={t("collectionRate")}
+          value={`${collectionRate}%`}
+          icon={<Percent size={22} />}
+          trend={formatCurrency(totalBilled)}
+          trendUp
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className={`${cardCls} lg:col-span-2`}>
+          <h3 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">
+            {t("monthlyCollections")}
+          </h3>
+          <p className="mb-4 text-xs text-slate-400">{t("last6Months")}</p>
+          <TrendChart
+            labels={monthly.map((m) => m.label)}
+            series={[
+              {
+                label: t("collected"),
+                color: "#0f766e",
+                values: monthly.map((m) => m.paid),
+              },
+              {
+                label: t("billed"),
+                color: "#d9a441",
+                values: monthly.map((m) => m.billed),
+              },
+            ]}
+            formatValue={formatCurrency}
+          />
+        </section>
+
+        <section className={cardCls}>
+          <h3 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">
+            {t("collectionRate")}
+          </h3>
+          <p className="mb-4 text-xs text-slate-400">
+            {formatCurrency(totalBilled)} {t("billed")}
+          </p>
+          <DonutChart
+            data={[
+              { label: t("collected"), value: totalPaid, color: "#0f766e" },
+              { label: t("remaining"), value: totalRemaining, color: "#dc2626" },
+            ]}
+            centerValue={`${collectionRate}%`}
+            centerLabel={t("collectionRate")}
+            size={150}
+          />
+        </section>
+      </div>
+
       {/* tabs */}
       <div className="flex gap-2 border-b border-border">
-        {(["students", "teachers"] as Tab[]).map((k) => (
+        {(["students", "teachers", "accounts"] as Tab[]).map((k) => (
           <button
             key={k}
             onClick={() => setTab(k)}
@@ -340,7 +550,17 @@ export default function CenterPaymentsPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {k === "students" ? t("studentPayments") : t("teacherPayments")}
+            {k === "students"
+              ? t("studentPayments")
+              : k === "teachers"
+                ? t("teacherPayments")
+                : t("collectionAccounts")}
+            {k === "accounts" &&
+              proofs.filter((p) => p.status === "pending").length > 0 && (
+                <span className="ms-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-xs font-bold text-white">
+                  {proofs.filter((p) => p.status === "pending").length}
+                </span>
+              )}
           </button>
         ))}
       </div>
@@ -719,6 +939,245 @@ export default function CenterPaymentsPage() {
               }))}
             />
           )}
+        </section>
+      )}
+
+      {/* ══ accounts tab: collection accounts + transfer proofs ══ */}
+      {tab === "accounts" && (
+        <section className="space-y-6">
+          {/* methods */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                {t("collectionAccounts")}
+              </h2>
+              <Button onClick={() => setShowMethodForm((v) => !v)}>
+                {showMethodForm ? t("cancel") : t("addAccount")}
+              </Button>
+            </div>
+
+            {showMethodForm && (
+              <form
+                onSubmit={handleAddMethod}
+                className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900"
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <select
+                    value={methodForm.kind}
+                    onChange={(e) =>
+                      setMethodForm({
+                        ...methodForm,
+                        kind: e.target.value as PaymentMethodKind,
+                      })
+                    }
+                    className={selectCls}
+                  >
+                    <option value="bank">{t("methodBank")}</option>
+                    <option value="wallet">{t("methodWallet")}</option>
+                    <option value="cash">{t("methodCash")}</option>
+                  </select>
+                  <Input
+                    label={t("accountLabel")}
+                    value={methodForm.label}
+                    onChange={(e) =>
+                      setMethodForm({ ...methodForm, label: e.target.value })
+                    }
+                    placeholder={t("accountLabelHint")}
+                    required
+                  />
+                  <Input
+                    label={accountLabel(methodForm.kind)}
+                    value={methodForm.account}
+                    onChange={(e) =>
+                      setMethodForm({ ...methodForm, account: e.target.value })
+                    }
+                    required
+                  />
+                  <Input
+                    label={t("methodDetails")}
+                    value={methodForm.details}
+                    onChange={(e) =>
+                      setMethodForm({ ...methodForm, details: e.target.value })
+                    }
+                  />
+                </div>
+                <Button type="submit" disabled={busy}>
+                  {t("save")}
+                </Button>
+              </form>
+            )}
+
+            {methods.length === 0 && !showMethodForm && (
+              <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+                {t("noPaymentAccounts")}
+              </p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {methods.map((m) => (
+                <div
+                  key={m.id}
+                  className={`rounded-xl border bg-card p-4 shadow-sm ${
+                    m.isActive ? "border-border" : "border-dashed opacity-60"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{m.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {kindLabel(m.kind)}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      status={m.isActive ? "active" : "inactive"}
+                      label={t(m.isActive ? "active" : "inactive")}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {accountLabel(m.kind)}
+                  </p>
+                  <p className="select-all font-mono text-sm">{m.account}</p>
+                  {m.details && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {m.details}
+                    </p>
+                  )}
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleMethod(m)}
+                    >
+                      {m.isActive ? t("inactive") : t("active")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => removeMethod(m)}
+                    >
+                      {t("delete")}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* proofs */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                {t("paymentProofs")}
+              </h2>
+              <select
+                value={proofFilter}
+                onChange={(e) =>
+                  setProofFilter(
+                    e.target.value as typeof proofFilter
+                  )
+                }
+                className={selectCls}
+              >
+                <option value="pending">{t("pending")}</option>
+                <option value="approved">{t("approved")}</option>
+                <option value="rejected">{t("rejected")}</option>
+                <option value="">{t("all")}</option>
+              </select>
+            </div>
+
+            <Table
+              columns={[
+                {
+                  key: "student",
+                  header: t("student"),
+                  render: (row: PaymentProof) => (
+                    <span className="font-medium">
+                      {row.studentName ?? "—"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "course",
+                  header: t("course"),
+                  render: (row: PaymentProof) => row.courseName ?? "—",
+                },
+                {
+                  key: "method",
+                  header: t("collectionAccounts"),
+                  render: (row: PaymentProof) =>
+                    row.methodLabel
+                      ? `${kindLabel(row.methodKind)} · ${row.methodLabel}`
+                      : "—",
+                },
+                {
+                  key: "amount",
+                  header: t("amount"),
+                  render: (row: PaymentProof) => formatCurrency(row.amount),
+                },
+                {
+                  key: "reference",
+                  header: t("referenceNumber"),
+                  render: (row: PaymentProof) => (
+                    <span className="font-mono text-xs">
+                      {row.reference || "—"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "screenshot",
+                  header: t("screenshot"),
+                  render: (row: PaymentProof) =>
+                    row.screenshot ? (
+                      <a
+                        href={row.screenshot}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-indigo-600 hover:underline"
+                      >
+                        {t("view")}
+                      </a>
+                    ) : (
+                      "—"
+                    ),
+                },
+                {
+                  key: "status",
+                  header: t("status"),
+                  render: (row: PaymentProof) => (
+                    <StatusBadge status={row.status} label={t(row.status)} />
+                  ),
+                },
+                {
+                  key: "actions",
+                  header: t("actions"),
+                  render: (row: PaymentProof) =>
+                    row.status === "pending" ? (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => reviewProof(row, "approve")}
+                        >
+                          {t("approve")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => reviewProof(row, "reject")}
+                        >
+                          {t("reject")}
+                        </Button>
+                      </div>
+                    ) : (
+                      "—"
+                    ),
+                },
+              ]}
+              rows={visibleProofs}
+              keyExtractor={(row) => row.id}
+              emptyText={t("noProofs")}
+            />
+          </div>
         </section>
       )}
     </div>

@@ -9,6 +9,7 @@ import {
   CreditCard,
   FileText,
   Settings,
+  Globe,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function CenterLayout({
         { href: "/center/tasks", label: t("tasks"), icon: <ClipboardCheck size={18} /> },
         { href: "/center/payments", label: t("payments"), icon: <CreditCard size={18} /> },
         { href: "/center/reports", label: t("reports"), icon: <FileText size={18} /> },
+        { href: "/center/profile", label: t("landingProfile"), icon: <Globe size={18} /> },
         { href: "/center/settings", label: t("settings"), icon: <Settings size={18} /> },
       ]}
     >

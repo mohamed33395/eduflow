@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/app/lib/i18n/client";
 import { getMyTasks, submitTaskSolution } from "@/app/services/tasks";
 import { uploadFile } from "@/app/services/storage";
+import {
+  DOC_IMAGE_EXTS,
+  uploadErrorMessage,
+  validateUploadFile,
+} from "@/app/lib/validators";
 import { Button } from "@/app/components/ui/button";
 import { StatusBadge } from "@/app/components/ui/status-badge";
 import type { MyTaskItem } from "@/app/types";
@@ -24,20 +29,42 @@ export default function StudentTasksPage() {
 
   useEffect(load, [load]);
 
+  const pickFile = (
+    taskId: string,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const f = e.target.files?.[0] ?? null;
+    const bad = validateUploadFile(f, {
+      extensions: DOC_IMAGE_EXTS,
+      maxMb: 20,
+    });
+    if (f && bad) {
+      setFiles((p) => ({ ...p, [taskId]: null }));
+      e.target.value = "";
+      setError(t(bad));
+      return;
+    }
+    setError("");
+    setFiles((p) => ({ ...p, [taskId]: f }));
+  };
+
   const submit = async (item: MyTaskItem) => {
     const file = files[item.task.id];
     if (!file) return;
     setBusyId(item.task.id);
     setError("");
     try {
-      const uploaded = await uploadFile(file, "submissions");
+      const uploaded = await uploadFile(file, "submissions", undefined, {
+        extensions: DOC_IMAGE_EXTS,
+        maxMb: 20,
+      });
       await submitTaskSolution(item.task.id, uploaded.url);
       setFiles((p) => ({ ...p, [item.task.id]: null }));
       setNotice(t("solutionUploaded"));
       load();
     } catch (err) {
       console.error("[StudentTasksPage] submit:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(uploadErrorMessage(err, t));
     } finally {
       setBusyId(null);
     }
@@ -120,13 +147,8 @@ export default function StudentTasksPage() {
                   <>
                     <input
                       type="file"
-                      accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
-                      onChange={(e) =>
-                        setFiles((p) => ({
-                          ...p,
-                          [item.task.id]: e.target.files?.[0] ?? null,
-                        }))
-                      }
+                      accept={DOC_IMAGE_EXTS.join(",")}
+                      onChange={(e) => pickFile(item.task.id, e)}
                       className="text-sm text-slate-600 file:me-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-300"
                     />
                     <Button

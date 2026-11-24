@@ -102,6 +102,7 @@ model User {
   ownedCourses    Course[]             @relation("CourseOwner")
   attendances     AttendanceRecord[]
   createdPayouts  TeacherPayout[]      @relation("PayoutApprover")
+  reviewedProofs  PaymentProof[]       @relation("ProofReviewer")
   notifications   Notification[]
 
   @@map("users")
@@ -184,6 +185,8 @@ model Center {
   bundlePrice         Float?   @map("bundle_price")
   monthlyFee          Float?   @map("monthly_fee")
   maxStudentsPerClass Int      @default(30) @map("max_students_per_class")
+  // Public landing-page content edited from the center dashboard ("الملف التعريفي").
+  landing             Json?    @map("landing_profile")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
@@ -198,6 +201,9 @@ model Center {
   teacherProfiles TeacherProfile[]
   billings      CenterBilling[]
   tasks         Task[]
+  landingRequests LandingRequest[]
+
+  paymentMethods PaymentMethod[]
 
   @@map("centers")
   @@index([ownerId])
@@ -306,6 +312,8 @@ model Course {
   description String
   content     String?
   coverImage  String?        @map("cover_image")
+  // Public landing-page content edited from the course dashboard ("الملف التعريفي").
+  landing     Json?          @map("landing_profile")
   ownerId     String         @map("owner_id")
   centerId    String?        @map("center_id")
   status      Status         @default(ACTIVE)
@@ -321,6 +329,7 @@ model Course {
   assignments     Assignment[]
   attendances     AttendanceRecord[]
   payments        Payment[]
+  landingRequests LandingRequest[]
 
   @@map("courses")
   @@index([ownerId])
@@ -658,10 +667,68 @@ model Payment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  proofs    PaymentProof[]
+
   @@map("payments")
   @@index([studentId])
   @@index([courseId])
   @@index([createdAt])
+}
+
+// ── Collection accounts the center admin adds (bank / wallet / cash).
+// Students pick one of these when sending a transfer proof.
+enum PaymentMethodKind {
+  BANK
+  WALLET
+  CASH
+}
+
+enum PaymentProofStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PaymentMethod {
+  id        String            @id @default(cuid())
+  centerId  String            @map("center_id")
+  center    Center            @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  kind      PaymentMethodKind
+  label     String            // e.g. "Vodafone Cash", "CIB"
+  account   String            // bank IBAN/account or wallet number (cash → note)
+  details   String?
+  isActive  Boolean           @default(true) @map("is_active")
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  proofs    PaymentProof[]
+
+  @@map("payment_methods")
+  @@index([centerId])
+}
+
+// Student transfer proof: screenshot + reference number → center approves,
+// which records an installment on the payment automatically.
+model PaymentProof {
+  id           String             @id @default(cuid())
+  paymentId    String             @map("payment_id")
+  payment      Payment            @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  methodId     String?            @map("method_id")
+  method       PaymentMethod?     @relation(fields: [methodId], references: [id], onDelete: SetNull)
+  amount       Float              // amount the student claims to have transferred
+  reference    String?            // transfer / receipt reference number
+  screenshot   String?            // uploaded proof image URL
+  status       PaymentProofStatus @default(PENDING)
+  reviewedById String?            @map("reviewed_by_id")
+  reviewedBy   User?              @relation("ProofReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?          @map("reviewed_at")
+  notes        String?
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  @@map("payment_proofs")
+  @@index([paymentId])
+  @@index([status])
 }
 
 // ────────────────────────────── Teacher compensation ──────────────────────────────
@@ -695,6 +762,31 @@ model TeacherPayout {
 }
 
 // Uploaded file blobs (local-storage fallback when S3 isn't configured).
+// Booking/join requests submitted from the public landing pages
+// (/center/[slug], /course/[slug]). `role` is "student" | "teacher" and
+// `status` is pending | contacted | accepted | rejected — plain strings so
+// the flow can evolve without a migration.
+model LandingRequest {
+  id        String    @id @default(cuid())
+  centerId  String?   @map("center_id")
+  center    Center?   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  courseId  String?   @map("course_id")
+  course    Course?   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  role      String
+  name      String
+  phone     String
+  email     String?
+  message   String?
+  status    String    @default("pending")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("landing_requests")
+  @@index([centerId])
+  @@index([courseId])
+  @@index([status])
+}
+
 model StoredFile {
   key         String   @id
   contentType String   @map("content_type")

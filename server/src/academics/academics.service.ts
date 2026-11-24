@@ -119,8 +119,14 @@ export class AcademicsService {
         slug: true,
         type: true,
         level: true,
+        gradeFrom: true,
+        gradeTo: true,
         description: true,
+        content: true,
         coverImage: true,
+        status: true,
+        landing: true,
+        createdAt: true,
         center: { select: { name: true, slug: true } },
       },
     });
@@ -138,7 +144,20 @@ export class AcademicsService {
     ) {
       throw new ConflictException('Cannot edit this course');
     }
-    return this.prisma.course.update({ where: { id }, data: dto });
+    const { landing, ...rest } = dto;
+    return this.prisma.course.update({
+      where: { id },
+      data: {
+        ...rest,
+        // `landing` is the public page profile JSON; null clears it.
+        ...(landing !== undefined && {
+          landing:
+            landing === null
+              ? Prisma.JsonNull
+              : (landing as unknown as Prisma.InputJsonValue),
+        }),
+      },
+    });
   }
 
   async deleteCourse(actor: AuthUser, id: string) {

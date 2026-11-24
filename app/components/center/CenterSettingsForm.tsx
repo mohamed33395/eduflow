@@ -45,6 +45,8 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
+  /** Which vertical tab is active. */
+  const [tab, setTab] = useState("curriculum");
   const [yearMeta, setYearMeta] = useState({
     level: "primary" as EducationLevel,
     grade: 1,
@@ -410,6 +412,13 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
     return <p className="text-slate-500">{t("loading")}</p>;
   }
 
+  const tabs = [
+    ["curriculum", t("curriculum")],
+    ["subjects", t("subjects")],
+    ["class", t("classSettings")],
+    ["groups", t("groupsPerYear")],
+  ] as const;
+
   return (
     <div className="max-w-5xl">
       <h1 className="mb-6 text-2xl font-bold text-slate-900 dark:text-white">
@@ -418,6 +427,29 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {success && <p className="mb-4 text-sm text-green-600">{success}</p>}
 
+      <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+        {/* ── vertical tab rail ── */}
+        <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 pb-3 dark:border-slate-700 sm:sticky sm:top-6 sm:w-48 sm:flex-col sm:border-b-0 sm:border-e sm:pe-4 sm:pb-0">
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-start text-sm font-medium transition ${
+                tab === key
+                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                  : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        {/* ── active tab content ── */}
+        <div className="min-w-0 flex-1 space-y-6">
+      {tab === "curriculum" && (
+      <>
       <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-col flex-wrap items-start justify-between gap-4 sm:flex-row sm:items-center">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -483,7 +515,6 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
         </div>
       </section>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             {t("year")}
@@ -552,7 +583,10 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
               .join("، ")}
           </p>
         </section>
+      </>
+      )}
 
+        {tab === "subjects" && (
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             {t("subjects")}
@@ -657,7 +691,9 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
             </div>
           </div>
         </section>
+        )}
 
+        {tab === "class" && (
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             {t("classSettings")}
@@ -676,7 +712,9 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
             }
           />
         </section>
+        )}
 
+        {tab === "groups" && (
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             {t("groupsPerYear")}
@@ -768,6 +806,9 @@ export function CenterSettingsForm({ centerId, endpoint }: CenterSettingsFormPro
             {t("addGroup")}
           </Button>
         </section>
+        )}
+        </div>
+      </div>
 
         <Button type="submit" disabled={loading}>
           {loading ? t("saving") : t("saveChanges")}

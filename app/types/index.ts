@@ -62,6 +62,127 @@ export interface CenterSettings {
   years?: CenterYearPackage[];
 }
 
+/**
+ * Public landing-page content ("الملف التعريفي") editable from the
+ * center/course dashboards. Mirrors `LandingProfileDto` on the backend —
+ * update both together. Stored as JSON; extend without migrations.
+ */
+export interface LandingFeature {
+  title: string;
+  description?: string;
+}
+
+/** A highlighted student in the landing "top students" section. */
+export interface LandingTopStudent {
+  name: string;
+  /** Achievement / grade — e.g. "الأول على المحافظة". */
+  subtitle?: string;
+  image?: string;
+}
+
+export interface LandingSocials {
+  facebook?: string;
+  instagram?: string;
+  youtube?: string;
+  tiktok?: string;
+  telegram?: string;
+}
+
+/**
+ * Overridable UI strings on the public landing page. Any missing key falls
+ * back to the visitor's i18n default — so every word on the page is editable
+ * from the profile form without duplicating defaults.
+ */
+export interface LandingLabels {
+  featuresTitle?: string;
+  aboutTitle?: string;
+  galleryTitle?: string;
+  topStudentsTitle?: string;
+  contactTitle?: string;
+  bookingTitle?: string;
+  bookingSubtitle?: string;
+  bookingRoleStudent?: string;
+  bookingRoleTeacher?: string;
+  bookingNameLabel?: string;
+  bookingPhoneLabel?: string;
+  bookingEmailLabel?: string;
+  bookingMessageLabel?: string;
+  bookingSubmitLabel?: string;
+  bookingSuccess?: string;
+}
+
+/** Per-section background-color overrides on the public landing page. */
+export interface LandingColors {
+  heroBg?: string;
+  featuresBg?: string;
+  aboutBg?: string;
+  topStudentsBg?: string;
+  galleryBg?: string;
+  bookingBg?: string;
+  contactBg?: string;
+  footerBg?: string;
+  /** Background of the inner white cards. */
+  cardBg?: string;
+  /** Section headings color. */
+  titleColor?: string;
+  /** Body/description text color. */
+  textColor?: string;
+}
+
+export interface LandingProfile {
+  /** false = public page hidden. Missing = visible. */
+  published?: boolean;
+  headline?: string;
+  tagline?: string;
+  /** Meta line under the headline (overrides the generated course meta). */
+  subtitle?: string;
+  about?: string;
+  ctaLabel?: string;
+  /** Absolute URL or app-relative path like "/login". */
+  ctaUrl?: string;
+  /** false = hide the hero call-to-action button. Missing = visible. */
+  ctaEnabled?: boolean;
+  phone?: string;
+  whatsapp?: string;
+  address?: string;
+  website?: string;
+  heroImage?: string;
+  /** Brand mark beside the hero title — falls back to the entity logo. */
+  heroLogo?: string;
+  gallery?: string[];
+  features?: LandingFeature[];
+  topStudents?: LandingTopStudent[];
+  socials?: LandingSocials;
+  accentColor?: string;
+  /** false = hide the booking-request form. Missing = visible. */
+  bookingEnabled?: boolean;
+  footerText?: string;
+  labels?: LandingLabels;
+  colors?: LandingColors;
+}
+
+/** Booking/join request submitted from a public landing page. */
+export type LandingRequestRole = "student" | "teacher";
+export type LandingRequestStatus =
+  | "pending"
+  | "contacted"
+  | "accepted"
+  | "rejected";
+
+export interface LandingRequest {
+  id: string;
+  centerId?: string | null;
+  courseId?: string | null;
+  role: LandingRequestRole;
+  name: string;
+  phone: string;
+  email?: string | null;
+  message?: string | null;
+  status: LandingRequestStatus;
+  createdAt: string;
+  course?: { name: string; slug: string } | null;
+}
+
 export type BillingStatus = "PENDING" | "PAID" | "WAIVED";
 
 export interface CenterBilling {
@@ -88,6 +209,8 @@ export interface Center {
   ownerId: string;
   /** Monthly platform fee owed by the center (super admin only). */
   monthlyFee?: number;
+  /** Public landing-page profile ("الملف التعريفي"). */
+  landing?: LandingProfile;
   settings?: CenterSettings;
   createdAt: string;
   _count?: { studentProfiles: number; teacherProfiles: number; courses: number };
@@ -113,6 +236,8 @@ export interface Course {
   ownerId: string;
   centerId?: string;
   status: "active" | "inactive";
+  /** Public landing-page profile ("الملف التعريفي"). */
+  landing?: LandingProfile;
   createdAt: string;
 }
 
@@ -368,4 +493,36 @@ export interface AppNotification {
   data?: Record<string, unknown>;
   readAt?: string;
   createdAt: string;
+}
+
+export type PaymentMethodKind = "bank" | "wallet" | "cash";
+
+export interface PaymentMethod {
+  id: string;
+  kind: PaymentMethodKind;
+  label: string;
+  account: string;
+  details?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type PaymentProofStatus = "pending" | "approved" | "rejected";
+
+export interface PaymentProof {
+  id: string;
+  paymentId: string;
+  amount: number;
+  reference?: string;
+  screenshot?: string;
+  status: PaymentProofStatus;
+  notes?: string;
+  createdAt: string;
+  methodId?: string;
+  methodKind?: PaymentMethodKind;
+  methodLabel?: string;
+  methodAccount?: string;
+  studentId?: string;
+  studentName?: string;
+  courseName?: string;
 }

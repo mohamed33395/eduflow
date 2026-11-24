@@ -7,6 +7,11 @@ import { Table } from "@/app/components/ui/table";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { uploadFile } from "@/app/services/storage";
+import {
+  LESSON_EXTS,
+  uploadErrorMessage,
+  validateUploadFile,
+} from "@/app/lib/validators";
 import { useI18n } from "@/app/lib/i18n/client";
 import type { Lesson } from "@/app/types";
 
@@ -23,60 +28,78 @@ export default function CourseLessonsPage() {
   });
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (courseId) getLessons(courseId).then(setLessons);
   }, [courseId]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setFile(e.target.files[0]);
+    const f = e.target.files?.[0] ?? null;
+    const bad = validateUploadFile(f, { extensions: LESSON_EXTS });
+    if (f && bad) {
+      setFile(null);
+      e.target.value = "";
+      setError(t(bad));
+      return;
+    }
+    setError("");
+    if (f) setFile(f);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!courseId) return;
     setUploading(true);
-    let videoUrl = form.videoUrl;
-    const files: Lesson["files"] = [];
+    setError("");
+    try {
+      let videoUrl = form.videoUrl;
+      const files: Lesson["files"] = [];
 
-    if (file) {
-      const type = file.type.startsWith("video/")
-        ? "videos"
-        : file.type === "application/pdf"
-        ? "pdfs"
-        : "other";
-      const res = await uploadFile(
-        file,
-        type,
-        (p) => console.log(`Upload ${p}%`)
-      );
-      if (type === "videos") videoUrl = res.url;
-      else
-        files.push({
-          name: file.name,
-          url: res.url,
-          type:
-            file.type === "application/pdf"
-              ? "pdf"
-              : file.type.startsWith("image/")
-              ? "image"
-              : "other",
-        });
+      if (file) {
+        const type = file.type.startsWith("video/")
+          ? "videos"
+          : file.type === "application/pdf"
+          ? "pdfs"
+          : "other";
+        const res = await uploadFile(
+          file,
+          type,
+          (p) => console.log(`Upload ${p}%`),
+          { extensions: LESSON_EXTS }
+        );
+        if (type === "videos") videoUrl = res.url;
+        else
+          files.push({
+            name: file.name,
+            url: res.url,
+            type:
+              file.type === "application/pdf"
+                ? "pdf"
+                : file.type.startsWith("image/")
+                ? "image"
+                : "other",
+          });
+      }
+
+      await createLesson({
+        courseId,
+        title: form.title,
+        description: form.description,
+        videoUrl,
+        files,
+        order: form.order,
+      });
+      setShowForm(false);
+      setForm({ title: "", description: "", videoUrl: "", order: 1 });
+      setFile(null);
+      getLessons(courseId).then(setLessons);
+    } catch (err) {
+      console.error("[CourseLessonsPage] submit:", err);
+      setError(uploadErrorMessage(err, t));
+    } finally {
+      setUploading(false);
     }
-
-    await createLesson({
-      courseId,
-      title: form.title,
-      description: form.description,
-      videoUrl,
-      files,
-      order: form.order,
-    });
-    setUploading(false);
-    setShowForm(false);
-    setForm({ title: "", description: "", videoUrl: "", order: 1 });
-    setFile(null);
-    getLessons(courseId).then(setLessons);
   };
 
   return (
@@ -89,6 +112,12 @@ export default function CourseLessonsPage() {
           {showForm ? t("cancel") : t("addLesson")}
         </Button>
       </div>
+
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          {error}
+        </p>
+      )}
 
       {showForm && (
         <form

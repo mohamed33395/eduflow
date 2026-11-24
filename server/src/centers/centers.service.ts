@@ -130,7 +130,12 @@ export class CentersService {
         name: true,
         slug: true,
         logo: true,
+        email: true,
+        phone: true,
+        address: true,
         status: true,
+        landing: true,
+        createdAt: true,
       },
     });
     if (!center) throw new NotFoundException('Center not found');
@@ -142,11 +147,18 @@ export class CentersService {
     if (!center) throw new NotFoundException('Center not found');
     assertCenterScope(actor, center.id);
     // only super admin flips status, slug or the platform fee
-    const { status, monthlyFee, slug, ...rest } = dto;
+    const { status, monthlyFee, slug, landing, ...rest } = dto;
     return this.prisma.center.update({
       where: { id },
       data: {
         ...rest,
+        // `landing` is the public page profile JSON; null clears it.
+        ...(landing !== undefined && {
+          landing:
+            landing === null
+              ? Prisma.JsonNull
+              : (landing as unknown as Prisma.InputJsonValue),
+        }),
         ...(actor.role === Role.SUPER_ADMIN && status && { status }),
         ...(actor.role === Role.SUPER_ADMIN &&
           monthlyFee !== undefined && { monthlyFee }),

@@ -21,7 +21,7 @@ import {
 import { Button } from "@/app/components/ui/button";
 import { Table } from "@/app/components/ui/table";
 import { DonutChart } from "@/app/components/ui/charts";
-import { BookOpen, FileText, Users, Layout } from "lucide-react";
+import { BookOpen, FileText, Users, Layout, Globe } from "lucide-react";
 import type { Course, Lesson, Assignment, Student } from "@/app/types";
 
 type Row = Record<string, unknown>;
@@ -82,6 +82,30 @@ export default async function CourseDashboardPage() {
           <StatsCard key={s.title} title={s.title} value={s.value} icon={s.icon} />
         ))}
       </div>
+
+      {course && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe size={20} />
+              {t("landingProfile")}
+            </CardTitle>
+            <CardDescription>{t("landingCardHint")}</CardDescription>
+          </CardHeader>
+          <CardFooter className="gap-3">
+            <Button href="/course/profile" variant="outline" size="sm">
+              {t("edit")}
+            </Button>
+            <Button
+              href={`/course/${course.slug}`}
+              variant="secondary"
+              size="sm"
+            >
+              {t("openPublicPage")}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

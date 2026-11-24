@@ -1,4 +1,9 @@
 import { api } from "@/app/lib/api";
+import {
+  UploadValidationError,
+  validateUploadFile,
+  type FileRule,
+} from "@/app/lib/validators";
 
 export type UploadPath =
   | "avatars"
@@ -33,8 +38,12 @@ const FOLDER_MAP: Record<UploadPath, string> = {
 export async function uploadFile(
   file: File,
   path: UploadPath,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  rule: FileRule = {}
 ): Promise<UploadResult> {
+  // Client-side backstop — the DB blob cap is 50MB and forms restrict types.
+  const bad = validateUploadFile(file, rule);
+  if (bad) throw new UploadValidationError(bad);
   // 1) request a presigned PUT URL from the backend.
   // The backend validates filename with /^[\w.\- ]+$/ — replace anything else
   // (Arabic letters, parentheses…) or the request fails with a generic 400.

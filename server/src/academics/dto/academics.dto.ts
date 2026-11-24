@@ -7,8 +7,11 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { EducationLevel, Status } from '@prisma/client';
+import { LandingProfileDto } from '../../common/landing-profile.dto';
 
 // ── Courses ──
 export class CreateCourseDto {
@@ -106,6 +109,12 @@ export class UpdateCourseDto {
   @IsOptional()
   @IsEnum(Status)
   status?: Status;
+
+  /** Public landing-page content ("الملف التعريفي"). Send null to clear. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LandingProfileDto)
+  landing?: LandingProfileDto;
 }
 
 // ── Classes ──

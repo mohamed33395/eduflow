@@ -14,6 +14,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { TasksModule } from './tasks/tasks.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { LandingRequestsModule } from './landing-requests/landing-requests.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HealthController } from './health.controller';
@@ -34,6 +35,7 @@ import { HealthController } from './health.controller';
     UploadsModule,
     TasksModule,
     NotificationsModule,
+    LandingRequestsModule,
   ],
   controllers: [HealthController],
   providers: [

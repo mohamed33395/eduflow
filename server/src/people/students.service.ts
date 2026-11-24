@@ -150,6 +150,9 @@ export class StudentsService {
     };
     if (actor.role === Role.TEACHER) {
       where.id = { in: await this.studentIdsForTeacher(actor.id) };
+    } else if (actor.role === Role.STUDENT) {
+      // Students never see classmates — only their own row.
+      where.id = actor.id;
     } else if (filters.teacherId) {
       where.OR = [
         { primaryTeacherId: filters.teacherId },

@@ -34,6 +34,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -46,6 +47,7 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -80,6 +82,7 @@ export class AuthController {
 
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
@@ -108,6 +111,7 @@ export class AuthController {
   /** One-time bootstrap: creates the first super admin. */
   @Public()
   @Post('setup')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   setup(@Body() dto: SetupSuperAdminDto) {
     return this.auth.setupSuperAdmin(dto);
   }

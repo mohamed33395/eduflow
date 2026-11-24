@@ -15,6 +15,9 @@ import type {
   Class,
   Course,
   EducationLevel,
+  LandingFeature,
+  LandingProfile,
+  LandingTopStudent,
   Lesson,
   LessonFile,
   Payment,
@@ -138,6 +141,106 @@ export function toCenterSettings(row: Row): CenterSettings | undefined {
 
 // ── entities ───────────────────────────────────────────────────────
 
+/** Sanitize the public landing-page JSON into a typed LandingProfile. */
+export function toLandingProfile(v: unknown): LandingProfile | undefined {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+  const row = v as Row;
+  const socials =
+    row.socials && typeof row.socials === "object" && !Array.isArray(row.socials)
+      ? {
+          facebook: strOr((row.socials as Row).facebook),
+          instagram: strOr((row.socials as Row).instagram),
+          youtube: strOr((row.socials as Row).youtube),
+          tiktok: strOr((row.socials as Row).tiktok),
+          telegram: strOr((row.socials as Row).telegram),
+        }
+      : undefined;
+  const labels =
+    row.labels && typeof row.labels === "object" && !Array.isArray(row.labels)
+      ? Object.fromEntries(
+          [
+            "featuresTitle",
+            "aboutTitle",
+            "galleryTitle",
+            "topStudentsTitle",
+            "contactTitle",
+            "bookingTitle",
+            "bookingSubtitle",
+            "bookingRoleStudent",
+            "bookingRoleTeacher",
+            "bookingNameLabel",
+            "bookingPhoneLabel",
+            "bookingEmailLabel",
+            "bookingMessageLabel",
+            "bookingSubmitLabel",
+            "bookingSuccess",
+          ]
+            .map((k) => [k, strOr((row.labels as Row)[k])])
+            .filter(([, v]) => v !== undefined)
+        )
+      : undefined;
+  const colors =
+    row.colors && typeof row.colors === "object" && !Array.isArray(row.colors)
+      ? Object.fromEntries(
+          [
+            "heroBg",
+            "featuresBg",
+            "aboutBg",
+            "topStudentsBg",
+            "galleryBg",
+            "bookingBg",
+            "contactBg",
+            "footerBg",
+            "cardBg",
+            "titleColor",
+            "textColor",
+          ]
+            .map((k) => [k, strOr((row.colors as Row)[k])])
+            .filter(([, v]) => v !== undefined)
+        )
+      : undefined;
+  return {
+    published: typeof row.published === "boolean" ? row.published : undefined,
+    headline: strOr(row.headline),
+    tagline: strOr(row.tagline),
+    subtitle: strOr(row.subtitle),
+    about: strOr(row.about),
+    ctaLabel: strOr(row.ctaLabel),
+    ctaUrl: strOr(row.ctaUrl),
+    ctaEnabled:
+      typeof row.ctaEnabled === "boolean" ? row.ctaEnabled : undefined,
+    phone: strOr(row.phone),
+    whatsapp: strOr(row.whatsapp),
+    address: strOr(row.address),
+    website: strOr(row.website),
+    heroImage: strOr(row.heroImage),
+    heroLogo: strOr(row.heroLogo),
+    gallery: arr<unknown>(row.gallery)
+      .map((g) => str(g))
+      .filter(Boolean),
+    features: arr<Row>(row.features).map(
+      (f): LandingFeature => ({
+        title: str(f.title),
+        description: strOr(f.description),
+      })
+    ),
+    topStudents: arr<Row>(row.topStudents)
+      .map((s): LandingTopStudent => ({
+        name: str(s.name),
+        subtitle: strOr(s.subtitle),
+        image: strOr(s.image),
+      }))
+      .filter((s) => s.name),
+    socials,
+    accentColor: strOr(row.accentColor),
+    bookingEnabled:
+      typeof row.bookingEnabled === "boolean" ? row.bookingEnabled : undefined,
+    footerText: strOr(row.footerText),
+    labels,
+    colors,
+  };
+}
+
 export function toCenter(row: Row): Center {
   return {
     id: str(row.id),
@@ -149,6 +252,7 @@ export function toCenter(row: Row): Center {
     address: strOr(row.address),
     status: low(row.status, "active") as Center["status"],
     ownerId: str(row.ownerId),
+    landing: toLandingProfile(row.landing),
     settings: toCenterSettings(row),
     createdAt: iso(row.createdAt),
   };
@@ -169,6 +273,7 @@ export function toCourse(row: Row): Course {
     ownerId: str(row.ownerId),
     centerId: strOr(row.centerId),
     status: low(row.status, "active") as Course["status"],
+    landing: toLandingProfile(row.landing),
     createdAt: iso(row.createdAt),
   };
 }

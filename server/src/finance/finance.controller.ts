@@ -10,9 +10,11 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PayoutsService } from './payouts.service';
+import { PaymentChannelsService } from './payment-channels.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import {
   AuthUser,
@@ -20,11 +22,17 @@ import {
 } from '../common/decorators/current-user.decorator';
 import {
   CreatePaymentDto,
+  CreatePaymentMethodDto,
+  CreatePaymentProofDto,
   GeneratePayoutDto,
   ListPaymentsQuery,
   ListPayoutsQuery,
+  ListProofsQuery,
+  PreviewPayoutQuery,
   RecordInstallmentDto,
+  ReviewPaymentProofDto,
   UpdatePaymentDto,
+  UpdatePaymentMethodDto,
   UpdatePayoutDto,
 } from './dto/finance.dto';
 
@@ -35,6 +43,7 @@ export class FinanceController {
   constructor(
     private readonly payments: PaymentsService,
     private readonly payouts: PayoutsService,
+    private readonly channels: PaymentChannelsService,
   ) {}
 
   // ── Payments ──
@@ -76,6 +85,74 @@ export class FinanceController {
     return this.payments.remove(actor, id);
   }
 
+  // ── Payment methods (collection accounts) ──
+  @Get('payment-methods')
+  listMethods(@CurrentUser() actor: AuthUser) {
+    return this.channels.listMethods(actor);
+  }
+
+  @Post('payment-methods')
+  @Roles(...MANAGERS)
+  createMethod(
+    @CurrentUser() actor: AuthUser,
+    @Body() dto: CreatePaymentMethodDto,
+  ) {
+    return this.channels.createMethod(actor, dto);
+  }
+
+  @Patch('payment-methods/:id')
+  @Roles(...MANAGERS)
+  updateMethod(
+    @CurrentUser() actor: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePaymentMethodDto,
+  ) {
+    return this.channels.updateMethod(actor, id, dto);
+  }
+
+  @Delete('payment-methods/:id')
+  @Roles(...MANAGERS)
+  @HttpCode(HttpStatus.OK)
+  removeMethod(@CurrentUser() actor: AuthUser, @Param('id') id: string) {
+    return this.channels.removeMethod(actor, id);
+  }
+
+  // ── Student transfer proofs ──
+  @Post('payments/:id/proofs')
+  @Roles(Role.STUDENT)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  submitProof(
+    @CurrentUser() actor: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CreatePaymentProofDto,
+  ) {
+    return this.channels.submitProof(actor, id, dto);
+  }
+
+  /** Center admins review all proofs in their center. */
+  @Get('payment-proofs')
+  @Roles(...MANAGERS)
+  listProofs(@CurrentUser() actor: AuthUser, @Query() query: ListProofsQuery) {
+    return this.channels.listProofs(actor, query);
+  }
+
+  /** Student's own submitted proofs. */
+  @Get('payment-proofs/mine')
+  @Roles(Role.STUDENT)
+  myProofs(@CurrentUser() actor: AuthUser) {
+    return this.channels.myProofs(actor);
+  }
+
+  @Patch('payment-proofs/:id')
+  @Roles(...MANAGERS)
+  reviewProof(
+    @CurrentUser() actor: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: ReviewPaymentProofDto,
+  ) {
+    return this.channels.reviewProof(actor, id, dto);
+  }
+
   // ── Teacher payouts ──
   @Post('payouts')
   @Roles(Role.SUPER_ADMIN, Role.CENTER_OWNER)
@@ -87,11 +164,14 @@ export class FinanceController {
   @Roles(Role.SUPER_ADMIN, Role.CENTER_OWNER, Role.TEACHER)
   previewPayout(
     @CurrentUser() actor: AuthUser,
-    @Query('teacherId') teacherId: string,
-    @Query('periodStart') periodStart: string,
-    @Query('periodEnd') periodEnd: string,
+    @Query() query: PreviewPayoutQuery,
   ) {
-    return this.payouts.preview(actor, teacherId, periodStart, periodEnd);
+    return this.payouts.preview(
+      actor,
+      query.teacherId,
+      query.periodStart,
+      query.periodEnd,
+    );
   }
 
   @Get('payouts')

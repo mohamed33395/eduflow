@@ -6,6 +6,7 @@ import {
   FileText,
   Users,
   CheckCircle,
+  Globe,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,11 @@ export default async function CourseLayout({
           href: "/course/progress",
           label: t("progress"),
           icon: <CheckCircle size={18} />,
+        },
+        {
+          href: "/course/profile",
+          label: t("landingProfile"),
+          icon: <Globe size={18} />,
         },
       ]}
     >

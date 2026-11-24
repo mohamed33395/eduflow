@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useI18n } from "@/app/lib/i18n/client";
+import { getClasses } from "@/app/services/classes";
 import { getSubjects } from "@/app/services/subjects";
 import {
   createTask,
@@ -12,6 +13,11 @@ import {
   sendTaskResult,
 } from "@/app/services/tasks";
 import { uploadFile } from "@/app/services/storage";
+import {
+  DOC_IMAGE_EXTS,
+  uploadErrorMessage,
+  validateUploadFile,
+} from "@/app/lib/validators";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Select } from "@/app/components/ui/select";
@@ -19,6 +25,7 @@ import { StatusBadge } from "@/app/components/ui/status-badge";
 import { Table } from "@/app/components/ui/table";
 import type {
   CenterTask,
+  Class,
   Subject,
   TaskDetail,
   TaskFormData,
@@ -43,13 +50,49 @@ function StatChip({
   );
 }
 
+function TabPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+        active
+          ? "bg-indigo-600 text-white shadow-sm"
+          : "border border-border bg-card text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const ALL = "all";
+const NONE_CLASS = "__none__";
+
+const currentMonthKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
 export default function CenterTasksPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const centerId = user?.centerId ?? "";
 
   const [tasks, setTasks] = useState<CenterTask[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [activeClassId, setActiveClassId] = useState<string>(ALL);
+  const [activeSubjectId, setActiveSubjectId] = useState<string>(ALL);
+  const [month, setMonth] = useState<string>(currentMonthKey());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -81,6 +124,9 @@ export default function CenterTasksPage() {
     getSubjects({ centerId })
       .then(setSubjects)
       .catch((err) => console.error("[CenterTasksPage] subjects:", err));
+    getClasses(centerId)
+      .then(setClasses)
+      .catch((err) => console.error("[CenterTasksPage] classes:", err));
   }, [centerId, loadTasks]);
 
   // When the subject changes, reset dependent fields and load its
@@ -130,10 +176,26 @@ export default function CenterTasksPage() {
       setNotice(t("taskCreated"));
     } catch (err) {
       console.error("[CenterTasksPage] create:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(uploadErrorMessage(err, t));
     } finally {
       setBusy(false);
     }
+  };
+
+  const pickExamFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    const bad = validateUploadFile(f, {
+      extensions: DOC_IMAGE_EXTS,
+      maxMb: 20,
+    });
+    if (f && bad) {
+      setExamFile(null);
+      e.target.value = "";
+      setError(t(bad));
+      return;
+    }
+    setError("");
+    setExamFile(f);
   };
 
   const handleSendResult = async (s: TaskStudentRow) => {
@@ -185,6 +247,99 @@ export default function CenterTasksPage() {
     }
   };
 
+  // ── tabs & month filter ──────────────────────────────────────────
+  // Subjects the tasks reference (includes subjects deleted from settings).
+  const subjectTabsList = useMemo(() => {
+    const list = subjects.map((s) => ({
+      id: s.id,
+      name: s.name,
+      classId: s.classId ?? "",
+    }));
+    const known = new Set(list.map((s) => s.id));
+    for (const task of tasks) {
+      if (!known.has(task.subjectId)) {
+        known.add(task.subjectId);
+        list.push({ id: task.subjectId, name: task.subjectName, classId: "" });
+      }
+    }
+    return list;
+  }, [subjects, tasks]);
+
+  const classOfSubject = useMemo(
+    () => new Map(subjectTabsList.map((s) => [s.id, s.classId])),
+    [subjectTabsList]
+  );
+
+  const hasUnassigned = subjectTabsList.some((s) => !s.classId);
+
+  const subjectTabs =
+    activeClassId === ALL
+      ? subjectTabsList
+      : subjectTabsList.filter(
+          (s) =>
+            s.classId === (activeClassId === NONE_CLASS ? "" : activeClassId)
+        );
+
+  // Distinct months present in the data (current month always offered).
+  const monthKeys = useMemo(() => {
+    const keys = new Set<string>([currentMonthKey()]);
+    for (const task of tasks) {
+      if (task.createdAt) keys.add(task.createdAt.slice(0, 7));
+    }
+    return [...keys].sort().reverse();
+  }, [tasks]);
+
+  const monthOptions = [
+    ...monthKeys.map((m) => ({
+      value: m,
+      label: new Date(
+        Number(m.slice(0, 4)),
+        Number(m.slice(5, 7)) - 1,
+        1
+      ).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", {
+        month: "long",
+        year: "numeric",
+      }),
+    })),
+    { value: ALL, label: t("allMonths") },
+  ];
+
+  const selectClassTab = (cid: string) => {
+    setActiveClassId(cid);
+    setActiveSubjectId(ALL);
+  };
+
+  const visibleTasks = useMemo(
+    () =>
+      tasks.filter((task) => {
+        if (month !== ALL && !task.createdAt.startsWith(month)) return false;
+        if (activeSubjectId !== ALL && task.subjectId !== activeSubjectId)
+          return false;
+        if (activeClassId !== ALL) {
+          const cid = classOfSubject.get(task.subjectId) ?? "";
+          if (cid !== (activeClassId === NONE_CLASS ? "" : activeClassId))
+            return false;
+        }
+        return true;
+      }),
+    [tasks, month, activeSubjectId, activeClassId, classOfSubject]
+  );
+
+  const totals = useMemo(
+    () =>
+      visibleTasks.reduce(
+        (acc, task) => ({
+          notified: acc.notified + task.stats.notified,
+          submitted: acc.submitted + task.stats.submitted,
+          graded: acc.graded + task.stats.graded,
+          rejected: acc.rejected + task.stats.rejected,
+          pending: acc.pending + task.stats.pending,
+        }),
+        { notified: 0, submitted: 0, graded: 0, rejected: 0, pending: 0 }
+      ),
+    [visibleTasks]
+  );
+
   const subjectOptions = [
     { value: "", label: t("selectSubject") },
     ...subjects.map((s) => ({ value: s.id, label: s.name })),
@@ -210,13 +365,103 @@ export default function CenterTasksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
           {t("tasks")}
         </h1>
-        <Button onClick={() => setShowForm((v) => !v)}>
-          {showForm ? t("cancel") : t("addTask")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="w-48">
+            <Select
+              aria-label={t("month")}
+              value={month}
+              options={monthOptions}
+              onChange={(e) => setMonth(e.target.value)}
+            />
+          </div>
+          <Button onClick={() => setShowForm((v) => !v)}>
+            {showForm ? t("cancel") : t("addTask")}
+          </Button>
+        </div>
+      </div>
+
+      {(classes.length > 0 || hasUnassigned) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-muted-foreground">
+            {t("classGroup")}:
+          </span>
+          <TabPill
+            active={activeClassId === ALL}
+            onClick={() => selectClassTab(ALL)}
+          >
+            {t("all")}
+          </TabPill>
+          {classes.map((c) => (
+            <TabPill
+              key={c.id}
+              active={activeClassId === c.id}
+              onClick={() => selectClassTab(c.id)}
+            >
+              {c.name}
+            </TabPill>
+          ))}
+          {hasUnassigned && (
+            <TabPill
+              active={activeClassId === NONE_CLASS}
+              onClick={() => selectClassTab(NONE_CLASS)}
+            >
+              {t("unassigned")}
+            </TabPill>
+          )}
+        </div>
+      )}
+
+      {subjectTabsList.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-muted-foreground">
+            {t("subjects")}:
+          </span>
+          <TabPill
+            active={activeSubjectId === ALL}
+            onClick={() => setActiveSubjectId(ALL)}
+          >
+            {t("all")}
+          </TabPill>
+          {subjectTabs.map((s) => (
+            <TabPill
+              key={s.id}
+              active={activeSubjectId === s.id}
+              onClick={() => setActiveSubjectId(s.id)}
+            >
+              {s.name}
+            </TabPill>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-4 py-3">
+        <span className="text-sm font-semibold text-slate-900 dark:text-white">
+          {visibleTasks.length} {t("tasks")}
+        </span>
+        <StatChip
+          label={t("notified")}
+          value={totals.notified}
+          className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+        />
+        <StatChip
+          label={t("submitted")}
+          value={totals.submitted + totals.graded}
+          className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+        />
+        <StatChip
+          label={t("notSubmitted")}
+          value={totals.pending}
+          className="bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+        />
+        <StatChip
+          label={t("graded")}
+          value={totals.graded}
+          className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
+        />
       </div>
 
       {error && (
@@ -278,8 +523,8 @@ export default function CenterTasksPage() {
             <input
               type="file"
               required
-              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
-              onChange={(e) => setExamFile(e.target.files?.[0] ?? null)}
+              accept={DOC_IMAGE_EXTS.join(",")}
+              onChange={pickExamFile}
               className="block w-full text-sm text-slate-600 file:me-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-300"
             />
           </div>
@@ -290,12 +535,12 @@ export default function CenterTasksPage() {
       )}
 
       <div className="space-y-3">
-        {tasks.length === 0 && (
+        {visibleTasks.length === 0 && (
           <p className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
             {t("noTasksYet")}
           </p>
         )}
-        {tasks.map((task) => (
+        {visibleTasks.map((task) => (
           <div
             key={task.id}
             className="rounded-xl border border-border bg-card shadow-sm"

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  ScanBarcode,
   ScanLine,
   Search,
   UserCheck,
@@ -107,8 +108,11 @@ export default function CenterAttendancePage() {
   };
 
   useEffect(() => {
-    setNotice("");
-    void load();
+    const id = setTimeout(() => {
+      setNotice("");
+      void load();
+    }, 0);
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, centerId]);
 
@@ -240,6 +244,10 @@ export default function CenterAttendancePage() {
           <Button variant="outline" href="/center/attendance/scan">
             <ScanLine className="h-4 w-4" />
             {t("scanQr")}
+          </Button>
+          <Button variant="outline" href="/center/attendance/kiosk">
+            <ScanBarcode className="h-4 w-4" />
+            {t("attendanceKiosk")}
           </Button>
           <Button onClick={save} disabled={saving || dirtyCount === 0}>
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}

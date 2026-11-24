@@ -1,5 +1,6 @@
 import {
   IsIn,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -8,6 +9,13 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+
+export class TaskFormDataQuery {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  subjectId!: string;
+}
 
 export class CreateTaskDto {
   @IsString()

@@ -21,6 +21,7 @@ import {
   ReviewTaskSubmissionDto,
   SendResultDto,
   SubmitTaskDto,
+  TaskFormDataQuery,
 } from './dto/tasks.dto';
 
 const CENTER_MANAGERS = [Role.SUPER_ADMIN, Role.CENTER_OWNER];
@@ -32,8 +33,8 @@ export class TasksController {
   // ── form helpers ──
   @Get('tasks/form-data')
   @Roles(...CENTER_MANAGERS)
-  formData(@CurrentUser() actor: AuthUser, @Query('subjectId') subjectId: string) {
-    return this.tasks.formData(actor, subjectId);
+  formData(@CurrentUser() actor: AuthUser, @Query() query: TaskFormDataQuery) {
+    return this.tasks.formData(actor, query.subjectId);
   }
 
   // ── center ──

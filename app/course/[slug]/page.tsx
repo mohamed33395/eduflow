@@ -1,48 +1,40 @@
 import { getCourseBySlugPublic } from "@/app/services/courses-public";
-import Image from "next/image";
+import { PublicLanding } from "@/app/components/public-landing";
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
-export default async function CoursePublicPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+type Params = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const { slug } = await params;
+  const course = await getCourseBySlugPublic(slug).catch(() => null);
+  if (!course) return {};
+  return {
+    title: course.landing?.headline || course.name,
+    description:
+      course.landing?.tagline || course.landing?.about || course.description || undefined,
+  };
+}
+
+export default async function CoursePublicPage({ params }: Params) {
   const { slug } = await params;
   const course = await getCourseBySlugPublic(slug);
   if (!course) notFound();
+  // The owner can hide the public page from "الملف التعريفي".
+  if (course.landing?.published === false) notFound();
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 p-6">
-      <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow-xl">
-        <h1 className="text-3xl font-bold text-slate-900">{course.name}</h1>
-        <p className="mt-2 text-sm font-medium text-indigo-600">
-          {course.type} • {course.level} • Grades {course.gradeFrom} - {course.gradeTo}
-        </p>
-        {course.coverImage && (
-          <Image
-            src={course.coverImage}
-            alt={course.name}
-            width={768}
-            height={192}
-            unoptimized
-            className="mt-6 h-48 w-full rounded-lg object-cover"
-          />
-        )}
-        <p className="mt-6 whitespace-pre-wrap text-slate-700">
-          {course.description || "No description provided."}
-        </p>
-        <div className="mt-8">
-          <Link
-            href="/login?redirect=/course"
-            className="inline-block rounded-lg bg-indigo-600 px-6 py-2.5 font-semibold text-white hover:bg-indigo-700"
-          >
-            Login to Course
-          </Link>
-        </div>
-      </div>
-    </main>
+    <PublicLanding
+      kind="course"
+      slug={course.slug}
+      name={course.name}
+      image={course.coverImage}
+      subtitle={`${course.type} • ${course.level} • Grades ${course.gradeFrom} - ${course.gradeTo}`}
+      description={course.description}
+      landing={course.landing}
+      defaultCta={{ label: "Login to Course", href: "/login?redirect=/course" }}
+    />
   );
 }

@@ -7,6 +7,7 @@ import {
   CheckCircle,
   ClipboardCheck,
   GraduationCap,
+  CreditCard,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,11 @@ export default async function StudentLayout({
           href: "/student/attendance",
           label: t("attendance"),
           icon: <CheckCircle size={18} />,
+        },
+        {
+          href: "/student/payments",
+          label: t("payments"),
+          icon: <CreditCard size={18} />,
         },
       ]}
     >

@@ -68,6 +68,20 @@ export class UploadsService {
   }
 
   /**
+   * True when `url` is one of our own upload URLs (local /uploads/… or the
+   * configured S3 public base). Used to reject foreign URLs stored on
+   * entities (e.g. payment-proof screenshots).
+   */
+  isOwnedUrl(url: string): boolean {
+    if (!url || typeof url !== 'string' || url.length > 1000) return false;
+    const local = `${this.apiBase}/uploads/`;
+    if (url.startsWith(local)) return true;
+    const base = this.publicBase?.replace(/\/$/, '');
+    if (base && url.startsWith(`${base}/`)) return true;
+    return false;
+  }
+
+  /**
    * Issue a presigned PUT URL so the client uploads straight to S3/R2.
    * Returns { uploadUrl, publicUrl, key } — client PUTs the file to uploadUrl
    * then stores publicUrl on the entity (lesson file, avatar, submission…).

@@ -22,7 +22,7 @@ import { Button } from "@/app/components/ui/button";
 import { Table } from "@/app/components/ui/table";
 import { BarChart, DonutChart } from "@/app/components/ui/charts";
 import { formatCurrency } from "@/app/lib/utils";
-import { Users, UserCheck, DollarSign, Building2 } from "lucide-react";
+import { Users, UserCheck, DollarSign, Building2, Globe } from "lucide-react";
 import type { Center, Student, Teacher, Payment } from "@/app/types";
 
 type Row = Record<string, unknown>;
@@ -113,6 +113,30 @@ export default async function CenterDashboardPage() {
           <StatsCard key={s.title} title={s.title} value={s.value} icon={s.icon} />
         ))}
       </div>
+
+      {center && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe size={20} />
+              {t("landingProfile")}
+            </CardTitle>
+            <CardDescription>{t("landingCardHint")}</CardDescription>
+          </CardHeader>
+          <CardFooter className="gap-3">
+            <Button href="/center/profile" variant="outline" size="sm">
+              {t("edit")}
+            </Button>
+            <Button
+              href={`/center/${center.slug}`}
+              variant="secondary"
+              size="sm"
+            >
+              {t("openPublicPage")}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
